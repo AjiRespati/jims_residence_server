@@ -1,7 +1,7 @@
 module.exports = (sequelize, DataTypes) => {
     const RoomHistory = sequelize.define("RoomHistory", {
         id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
-        roomId: { type: DataTypes.INTEGER, allowNull: false },
+        roomId: { type: DataTypes.UUID, allowNull: false },
         eventDate: { type: DataTypes.STRING },
         eventName: { type: DataTypes.STRING },
         description: { type: DataTypes.TEXT },

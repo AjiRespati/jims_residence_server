@@ -13,7 +13,8 @@ exports.getAllRooms = async (req, res) => {
                     order: [['createdAt', 'DESC']],
                     limit: 1
                 }
-            ]
+            ],
+            order: [['createdAt', 'ASC']] // Oldest room first
         });
 
         const roomsWithTotalPrice = rooms.map(room => {
