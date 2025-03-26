@@ -1,10 +1,35 @@
-const { Room } = require('../models');
+const { Room, AdditionalPrice, OtherCost, Tenant, } = require('../models');
 const logger = require('../config/logger');
 
 exports.getAllRooms = async (req, res) => {
     try {
-        const data = await Room.findAll();
-        res.json(data);
+        const rooms = await Room.findAll({
+            include: [
+                { model: AdditionalPrice, as: 'AdditionalPrices' },
+                { model: OtherCost, as: 'OtherCosts' },
+                {
+                    model: Tenant,
+                    as: 'Tenants',
+                    order: [['createdAt', 'DESC']],
+                    limit: 1
+                }
+            ]
+        });
+
+        const roomsWithTotalPrice = rooms.map(room => {
+            const additionalPriceTotal = room.AdditionalPrices.reduce((sum, ap) => sum + ap.amount, 0);
+            const otherCostTotal = room.OtherCosts.reduce((sum, oc) => sum + oc.amount, 0);
+            const totalPrice = room.basicPrice + additionalPriceTotal + otherCostTotal;
+            const latestTenant = room.Tenants.length > 0 ? room.Tenants[0] : null;
+
+            return {
+                ...room.get({ plain: true }),
+                totalPrice,
+                latestTenant
+            };
+        });
+
+        res.json(roomsWithTotalPrice);
     } catch (error) {
         logger.error(error);
         res.status(500).json({ error: 'Internal Server Error' });
