@@ -2,8 +2,8 @@ module.exports = (sequelize, DataTypes) => {
     const Room = sequelize.define("Room", {
         id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
         roomNumber: { type: DataTypes.STRING, allowNull: false },
-        roomSize: { type: DataTypes.ENUM('small', 'medium', 'big'), allowNull: false },
-        roomStatus: { type: DataTypes.ENUM('available', 'occupied', 'maintenance', 'outOfOrder'), allowNull: false },
+        roomSize: { type: DataTypes.ENUM('Kecil', 'Standard', 'Besar'), allowNull: false },
+        roomStatus: { type: DataTypes.ENUM('Tersedia', 'Terisi', 'Pemeliharaan', 'Rusak'), allowNull: false },
         basicPrice: { type: DataTypes.FLOAT, allowNull: false },
         totalPrice: { type: DataTypes.FLOAT },
         description: { type: DataTypes.TEXT },
