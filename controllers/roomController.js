@@ -23,11 +23,15 @@ exports.getAllRooms = async (req, res) => {
             const totalPrice = room.basicPrice + additionalPriceTotal + otherCostTotal;
             const latestTenant = room.Tenants.length > 0 ? room.Tenants[0] : null;
 
-            return {
+            let response = {
                 ...room.get({ plain: true }),
                 totalPrice,
-                latestTenant
-            };
+                latestTenant,
+            }
+
+            const { Tenants, ...newResponse } = response
+
+            return { ...newResponse };
         });
 
         res.json(roomsWithTotalPrice);
@@ -74,11 +78,15 @@ exports.getRoomById = async (req, res) => {
         // Get the latest tenant if available
         const latestTenant = room.Tenants.length > 0 ? room.Tenants[0] : null;
 
-        res.json({
+        let response = {
             ...room.get({ plain: true }),
-            totalPrice, 
+            totalPrice,
             latestTenant,
-        });
+        }
+
+        const { Tenants, ...newResponse } = response
+
+        res.json(newResponse);
     } catch (error) {
         console.error(error);
         res.status(500).json({ error: 'Internal Server Error' });
@@ -137,10 +145,10 @@ exports.updateRoom = async (req, res) => {
 
         res.json({
             ...room.get({ plain: true }),
-            totalPrice, 
+            totalPrice,
             latestTenant,
         });
-        
+
     } catch (error) {
         logger.error(error);
         res.status(400).json({ error: 'Bad Request' });
