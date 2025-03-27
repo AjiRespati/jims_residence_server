@@ -5,7 +5,7 @@ module.exports = (sequelize, DataTypes) => {
         name: { type: DataTypes.STRING, allowNull: false },
         phone: { type: DataTypes.STRING, allowNull: false, unique: true },
         idNumber: { type: DataTypes.STRING, allowNull: false, unique: true },
-        idImagePath: { type: DataTypes.STRING, allowNull: false },
+        idImagePath: { type: DataTypes.STRING, allowNull: true },
         isIdCopyDone: { type: DataTypes.BOOLEAN, defaultValue: false, allowNull: false },
         tenancyStatus: { type: DataTypes.ENUM('Active', 'Inactive'), allowNull: false },
         updateBy: { type: DataTypes.STRING }

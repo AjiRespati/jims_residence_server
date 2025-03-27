@@ -25,7 +25,7 @@ exports.getOtherCostById = async (req, res) => {
 exports.createOtherCost = async (req, res) => {
     try {
         const data = await OtherCost.create(req.body);
-        res.status(201).json(data);
+        res.status(200).json(data);
     } catch (error) {
         logger.error(error);
         res.status(400).json({ error: 'Bad Request' });

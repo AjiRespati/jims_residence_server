@@ -25,7 +25,7 @@ exports.getUserById = async (req, res) => {
 exports.createUser = async (req, res) => {
     try {
         const data = await User.create(req.body);
-        res.status(201).json(data);
+        res.status(200).json(data);
     } catch (error) {
         logger.error(error);
         res.status(400).json({ error: 'Bad Request' });

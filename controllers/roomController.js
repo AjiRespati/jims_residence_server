@@ -51,7 +51,7 @@ exports.getRoomById = async (req, res) => {
 exports.createRoom = async (req, res) => {
     try {
         const data = await Room.create(req.body);
-        res.status(201).json(data);
+        res.status(200).json(data);
     } catch (error) {
         logger.error(error);
         res.status(400).json({ error: 'Bad Request' });
