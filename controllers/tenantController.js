@@ -1,4 +1,4 @@
-const { Tenant } = require('../models');
+const { Tenant, Room } = require('../models');
 const logger = require('../config/logger');
 
 exports.getAllTenants = async (req, res) => {
@@ -24,7 +24,12 @@ exports.getTenantById = async (req, res) => {
 
 exports.createTenant = async (req, res) => {
     try {
+        const { roomId } = req.body;
+
         const data = await Tenant.create(req.body);
+        // Update the room status to "Terisi"
+        await Room.update({ roomStatus: 'Terisi' }, { where: { id: roomId } });
+
         res.status(200).json(data);
     } catch (error) {
         logger.error(error);
