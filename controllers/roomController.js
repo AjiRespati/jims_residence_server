@@ -39,11 +39,48 @@ exports.getAllRooms = async (req, res) => {
 
 exports.getRoomById = async (req, res) => {
     try {
-        const data = await Room.findByPk(req.params.id);
-        if (!data) return res.status(404).json({ error: 'room not found' });
-        res.json(data);
+        const { id } = req.params;
+
+        // Find room with related AdditionalPrice, OtherCost, and latest Tenant
+        const room = await Room.findByPk(id, {
+            include: [
+                {
+                    model: AdditionalPrice,
+                    as: 'AdditionalPrices',
+                },
+                {
+                    model: OtherCost,
+                    as: 'OtherCosts',
+                },
+                {
+                    model: Tenant,
+                    as: 'Tenants',
+                    order: [['createdAt', 'DESC']],
+                    limit: 1,
+                }
+            ]
+        });
+
+        if (!room) {
+            return res.status(404).json({ error: 'Room not found' });
+        }
+
+        // Calculate total price
+        const basicPrice = room.basicPrice || 0;
+        const additionalPriceTotal = room.AdditionalPrices.reduce((sum, item) => sum + item.amount, 0);
+        const otherCostTotal = room.OtherCosts.reduce((sum, item) => sum + item.amount, 0);
+        const totalPrice = basicPrice + additionalPriceTotal + otherCostTotal;
+
+        // Get the latest tenant if available
+        const latestTenant = room.Tenants.length > 0 ? room.Tenants[0] : null;
+
+        res.json({
+            ...room.get({ plain: true }),
+            totalPrice, 
+            latestTenant,
+        });
     } catch (error) {
-        logger.error(error);
+        console.error(error);
         res.status(500).json({ error: 'Internal Server Error' });
     }
 };
@@ -64,7 +101,46 @@ exports.updateRoom = async (req, res) => {
         if (!data) return res.status(404).json({ error: 'room not found' });
 
         await data.update(req.body);
-        res.json(data);
+
+        // Find room with related AdditionalPrice, OtherCost, and latest Tenant
+        const room = await Room.findByPk(req.params.id, {
+            include: [
+                {
+                    model: AdditionalPrice,
+                    as: 'AdditionalPrices',
+                },
+                {
+                    model: OtherCost,
+                    as: 'OtherCosts',
+                },
+                {
+                    model: Tenant,
+                    as: 'Tenants',
+                    order: [['createdAt', 'DESC']],
+                    limit: 1,
+                }
+            ]
+        });
+
+        if (!room) {
+            return res.status(404).json({ error: 'Room not found' });
+        }
+
+        // Calculate total price
+        const basicPrice = room.basicPrice || 0;
+        const additionalPriceTotal = room.AdditionalPrices.reduce((sum, item) => sum + item.amount, 0);
+        const otherCostTotal = room.OtherCosts.reduce((sum, item) => sum + item.amount, 0);
+        const totalPrice = basicPrice + additionalPriceTotal + otherCostTotal;
+
+        // Get the latest tenant if available
+        const latestTenant = room.Tenants.length > 0 ? room.Tenants[0] : null;
+
+        res.json({
+            ...room.get({ plain: true }),
+            totalPrice, 
+            latestTenant,
+        });
+        
     } catch (error) {
         logger.error(error);
         res.status(400).json({ error: 'Bad Request' });
