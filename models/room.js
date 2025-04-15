@@ -5,12 +5,13 @@ module.exports = (sequelize, DataTypes) => {
         roomSize: { type: DataTypes.ENUM('Kecil', 'Standard', 'Besar'), allowNull: false },
         roomStatus: { type: DataTypes.ENUM('Tersedia', 'Terisi', 'Pemeliharaan', 'Rusak'), allowNull: false },
         basicPrice: { type: DataTypes.FLOAT, allowNull: false },
-        totalPrice: { type: DataTypes.FLOAT },
+        totalPrice: { type: DataTypes.FLOAT, allowNull: false },
         description: { type: DataTypes.TEXT },
         startDate: { type: DataTypes.DATE },
         dueDate: { type: DataTypes.DATE },
         paymentDate: { type: DataTypes.DATE },
         paymentStatus: { type: DataTypes.ENUM('unpaid', 'paid') },
+        createBy: { type: DataTypes.STRING },
         updateBy: { type: DataTypes.STRING }
     }, { timestamps: true });
 

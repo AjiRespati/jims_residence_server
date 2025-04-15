@@ -16,26 +16,20 @@ app.use(morgan("combined", { stream: { write: (message) => logger.info(message.t
 
 // ✅ Routes
 const authRoutes = require("./routes/authRoutes");
-const additionalPriceRoutes = require('./routes/additionalPriceRoutes');
-const otherCostRoutes = require('./routes/otherCostRoutes');
-const roomRoutes = require('./routes/roomRoutes');
-const roomHistoryRoutes = require('./routes/roomHistoryRoutes');
-const tenantRoutes = require('./routes/tenantRoutes');
-const transactionRoutes = require('./routes/transactionRoutes');
-const userRoutes = require('./routes/userRoutes');
+const userRoutes = require("./routes/userRoutes");
+
+const base = "/service";
+
+app.get(`${base}/`, (req, res) => {
+  res.status(200).json({ message: "Gracia Service API is running!" });
+});
 
 // ✅ Serve Static Files (Fix the Image Error)
-app.use('/api/uploads', express.static('uploads'));
+app.use(`${base}/api/uploads`, express.static('uploads'));
 
 // ✅ Register Routes
-app.use("/api/auth", authRoutes);
-app.use('/api/additionalPrice', additionalPriceRoutes);
-app.use('/api/otherCost', otherCostRoutes);
-app.use('/api/room', roomRoutes);
-app.use('/api/roomHistory', roomHistoryRoutes);
-app.use('/api/tenant', tenantRoutes);
-app.use('/api/transaction', transactionRoutes);
-app.use('/api/user', userRoutes);
+app.use(`${base}/api/auth`, authRoutes);
+app.use(`${base}/api/user`, userRoutes);
 
 // ✅ Sync Database & Start Server
 const PORT = process.env.PORT || 5000;
@@ -47,5 +41,7 @@ sequelize.sync({ alter: true })
     })
     .catch((err) => {
         console.log(err);
-        logger.error("❌ Database sync error:", err.stack);
+        logger.error("❌ Database sync error:");
+        logger.error(err.message);
+        logger.error(err.stack);
     });

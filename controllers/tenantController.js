@@ -6,7 +6,8 @@ exports.getAllTenants = async (req, res) => {
         const data = await Tenant.findAll();
         res.json(data);
     } catch (error) {
-        logger.error(error);
+        logger.error(`❌ getAllTenants error: ${error.message}`);
+        logger.error(error.stack);
         res.status(500).json({ error: 'Internal Server Error' });
     }
 };
@@ -17,7 +18,8 @@ exports.getTenantById = async (req, res) => {
         if (!data) return res.status(404).json({ error: 'tenant not found' });
         res.json(data);
     } catch (error) {
-        logger.error(error);
+        logger.error(`❌ getTenantById error: ${error.message}`);
+        logger.error(error.stack);
         res.status(500).json({ error: 'Internal Server Error' });
     }
 };
@@ -32,7 +34,8 @@ exports.createTenant = async (req, res) => {
 
         res.status(200).json(data);
     } catch (error) {
-        logger.error(error);
+        logger.error(`❌ createTenant error: ${error.message}`);
+        logger.error(error.stack);
         res.status(400).json({ error: 'Bad Request' });
     }
 };
@@ -45,7 +48,8 @@ exports.updateTenant = async (req, res) => {
         await data.update(req.body);
         res.json(data);
     } catch (error) {
-        logger.error(error);
+        logger.error(`❌ updateTenant error: ${error.message}`);
+        logger.error(error.stack);
         res.status(400).json({ error: 'Bad Request' });
     }
 };
@@ -58,7 +62,8 @@ exports.deleteTenant = async (req, res) => {
         await data.destroy();
         res.json({ message: 'tenant deleted successfully' });
     } catch (error) {
-        logger.error(error);
+        logger.error(`❌ deleteTenant error: ${error.message}`);
+        logger.error(error.stack);
         res.status(500).json({ error: 'Internal Server Error' });
     }
 };

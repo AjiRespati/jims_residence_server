@@ -1,9 +1,16 @@
-const { User } = require('../models');
+const { User, Salesman, SubAgent, Agent } = require('../models');
 const logger = require('../config/logger');
 
 exports.getAllUsers = async (req, res) => {
     try {
-        const data = await User.findAll();
+        let data = await User.findAll({
+            order: [["createdAt", "DESC"]]
+        });
+
+        data.forEach(el => {
+            el['password'] = undefined;
+        });
+
         res.json(data);
     } catch (error) {
         logger.error(error);
@@ -34,11 +41,22 @@ exports.createUser = async (req, res) => {
 
 exports.updateUser = async (req, res) => {
     try {
-        const data = await User.findByPk(req.params.id);
-        if (!data) return res.status(404).json({ error: 'user not found' });
+        const { id } = req.params;
+        const { level, status } = req.body;
 
-        await data.update(req.body);
-        res.json(data);
+        // 1. find user by id
+        const existingUser = await User.findByPk(id);
+        if (!existingUser) return res.status(404).json({ error: 'user not found' });
+
+        const { name, image, address, phone, email } = existingUser;
+
+        existingUser.level = level || existingUser.level;
+        existingUser.status = status || existingUser.status;
+
+        await existingUser.save();
+        logger.info(`User updated: ${id}`);
+
+        res.json(existingUser);
     } catch (error) {
         logger.error(error);
         res.status(400).json({ error: 'Bad Request' });
@@ -57,3 +75,9 @@ exports.deleteUser = async (req, res) => {
         res.status(500).json({ error: 'Internal Server Error' });
     }
 };
+
+const levelDescList = [
+    "Penjaga Kost",
+    "Admin",
+    "Pemilik",
+];

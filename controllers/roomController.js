@@ -36,7 +36,8 @@ exports.getAllRooms = async (req, res) => {
 
         res.json(roomsWithTotalPrice);
     } catch (error) {
-        logger.error(error);
+        logger.error(`❌ getAllRooms error: ${error.message}`);
+        logger.error(error.stack);
         res.status(500).json({ error: 'Internal Server Error' });
     }
 };
@@ -88,7 +89,8 @@ exports.getRoomById = async (req, res) => {
 
         res.json(newResponse);
     } catch (error) {
-        console.error(error);
+        logger.error(`❌ getRoomById error: ${error.message}`);
+        logger.error(error.stack);
         res.status(500).json({ error: 'Internal Server Error' });
     }
 };
@@ -98,7 +100,8 @@ exports.createRoom = async (req, res) => {
         const data = await Room.create(req.body);
         res.status(200).json(data);
     } catch (error) {
-        logger.error(error);
+        logger.error(`❌ createRoom error: ${error.message}`);
+        logger.error(error.stack);
         res.status(400).json({ error: 'Bad Request' });
     }
 };
@@ -150,7 +153,8 @@ exports.updateRoom = async (req, res) => {
         });
 
     } catch (error) {
-        logger.error(error);
+        logger.error(`❌ updateRoom error: ${error.message}`);
+        logger.error(error.stack);
         res.status(400).json({ error: 'Bad Request' });
     }
 };
@@ -163,7 +167,8 @@ exports.deleteRoom = async (req, res) => {
         await data.destroy();
         res.json({ message: 'room deleted successfully' });
     } catch (error) {
-        logger.error(error);
+        logger.error(`❌ deleteRoom error: ${error.message}`);
+        logger.error(error.stack);
         res.status(500).json({ error: 'Internal Server Error' });
     }
 };

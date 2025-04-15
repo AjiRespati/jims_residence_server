@@ -5,7 +5,7 @@ module.exports = (sequelize, DataTypes) => {
         eventDate: { type: DataTypes.STRING },
         eventName: { type: DataTypes.STRING },
         description: { type: DataTypes.TEXT },
-        updateBy: { type: DataTypes.STRING }
+        createBy: { type: DataTypes.STRING },
     }, { timestamps: true });
 
     RoomHistory.associate = (models) => {
