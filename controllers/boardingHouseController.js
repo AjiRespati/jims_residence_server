@@ -3,7 +3,11 @@ const logger = require('../config/logger');
 
 exports.getAllBoardingHouses = async (req, res) => {
     try {
-        const data = await BoardingHouse.findAll();
+        const data = await BoardingHouse.findAll(
+            {
+                order: [["createdAt", "DESC"]]
+            }
+        );
         res.json(data);
     } catch (error) {
         logger.error(`❌ getBoardingHouses error: ${error.message}`);
