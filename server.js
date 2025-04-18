@@ -17,6 +17,8 @@ app.use(morgan("combined", { stream: { write: (message) => logger.info(message.t
 // ✅ Routes
 const authRoutes = require("./routes/authRoutes");
 const userRoutes = require("./routes/userRoutes");
+const roomRoutes = require("./routes/roomRoutes");
+const boardingHouseRoutes = require("./routes/boardingHouseRoutes");
 
 const base = "/service";
 
@@ -30,6 +32,8 @@ app.use(`${base}/api/uploads`, express.static('uploads'));
 // ✅ Register Routes
 app.use(`${base}/api/auth`, authRoutes);
 app.use(`${base}/api/user`, userRoutes);
+app.use(`${base}/api/room`, roomRoutes);
+app.use(`${base}/api/boardingHouse`, boardingHouseRoutes);
 
 // ✅ Sync Database & Start Server
 const PORT = process.env.PORT || 5000;

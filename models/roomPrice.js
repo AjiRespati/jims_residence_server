@@ -1,7 +1,8 @@
 module.exports = (sequelize, DataTypes) => {
-    const OtherCost = sequelize.define("OtherCost", {
+    const RoomPrice = sequelize.define("RoomPrice", {
         id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
         paymentId: { type: DataTypes.UUID, allowNull: false },
+        roomSize: { type: DataTypes.ENUM('Small', 'Standard', 'Big'), allowNull: false, defaultValue: "Standard" },
         price: { type: DataTypes.FLOAT, allowNull: false },
         name: { type: DataTypes.STRING },
         description: { type: DataTypes.TEXT },
@@ -10,9 +11,9 @@ module.exports = (sequelize, DataTypes) => {
         status: { type: DataTypes.ENUM("active", "inactive"), allowNull: false, defaultValue: "active" },
     }, { timestamps: true });
 
-    OtherCost.associate = (models) => {
-        OtherCost.belongsTo(models.Payment, { foreignKey: "paymentId" });
+    RoomPrice.associate = (models) => {
+        RoomPrice.belongsTo(models.Payment, { foreignKey: "paymentId" });
     };
 
-    return OtherCost;
+    return RoomPrice;
 };

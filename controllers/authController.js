@@ -8,6 +8,10 @@ exports.register = async (req, res) => {
         const { username, password, name, email, phone, address, level, updateBy } = req.body;
         const hashedPassword = await bcrypt.hash(password, 10);
 
+        const count = await User.count();
+
+        const createLevel = count === 0 ? 2 : level
+
         const existingUser = await User.findOne({ where: { username } });
         if (existingUser) return res.status(400).json({ message: 'Username already exists' });
 
@@ -18,7 +22,7 @@ exports.register = async (req, res) => {
             email,
             phone,
             address,
-            level,
+            level: createLevel,
             updateBy
         });
 
