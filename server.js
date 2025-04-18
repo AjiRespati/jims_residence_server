@@ -15,10 +15,17 @@ app.use(express.json());
 app.use(morgan("combined", { stream: { write: (message) => logger.info(message.trim()) } }));
 
 // ✅ Routes
+const additionalPriceRoutes = require("./routes/additionalPriceRoutes");
 const authRoutes = require("./routes/authRoutes");
-const userRoutes = require("./routes/userRoutes");
-const roomRoutes = require("./routes/roomRoutes");
 const boardingHouseRoutes = require("./routes/boardingHouseRoutes");
+const otherCostRoutes = require("./routes/otherCostRoutes");
+const paymentRoutes = require("./routes/paymentRoutes");
+const roomHistoryRoutes = require("./routes/roomHistoryRoutes");
+const roomPriceRoutes = require("./routes/roomPriceRoutes");
+const roomRoutes = require("./routes/roomRoutes");
+const tenantRoutes = require("./routes/tenantRoutes");
+const transactionRoutes = require("./routes/transactionRoutes");
+const userRoutes = require("./routes/userRoutes");
 
 const base = "/service";
 
@@ -30,10 +37,17 @@ app.get(`${base}/`, (req, res) => {
 app.use(`${base}/api/uploads`, express.static('uploads'));
 
 // ✅ Register Routes
+app.use(`${base}/api/additionalPrice`, additionalPriceRoutes);
 app.use(`${base}/api/auth`, authRoutes);
-app.use(`${base}/api/user`, userRoutes);
-app.use(`${base}/api/room`, roomRoutes);
 app.use(`${base}/api/boardingHouse`, boardingHouseRoutes);
+app.use(`${base}/api/otherCost`, otherCostRoutes);
+app.use(`${base}/api/payment`, paymentRoutes);
+app.use(`${base}/api/roomHistory`, roomHistoryRoutes);
+app.use(`${base}/api/roomPrice`, roomPriceRoutes);
+app.use(`${base}/api/room`, roomRoutes);
+app.use(`${base}/api/tenant`, tenantRoutes);
+app.use(`${base}/api/transaction`, transactionRoutes);
+app.use(`${base}/api/user`, userRoutes);
 
 // ✅ Sync Database & Start Server
 const PORT = process.env.PORT || 5000;

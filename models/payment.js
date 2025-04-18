@@ -12,7 +12,6 @@ module.exports = (sequelize, DataTypes) => {
 
     Payment.associate = (models) => {
         Payment.belongsTo(models.Tenant, { foreignKey: "tenantId" });
-        // Payment.belongsTo(models.Room, { foreignKey: "roomId" });
         Payment.hasMany(models.RoomPrice, { foreignKey: "paymentId", onDelete: "CASCADE" });
         Payment.hasMany(models.AdditionalPrice, { foreignKey: "paymentId", onDelete: "CASCADE" });
         Payment.hasMany(models.OtherCost, { foreignKey: "paymentId", onDelete: "CASCADE" });
