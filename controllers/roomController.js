@@ -1,13 +1,17 @@
-const { BoardingHouse, Room, AdditionalPrice, OtherCost, Tenant, } = require('../models');
+const { BoardingHouse, Price, Room, AdditionalPrice, OtherCost, Tenant, } = require('../models');
 const logger = require('../config/logger');
 
 exports.getAllRooms = async (req, res) => {
     try {
+        const { kostId } = req.params;
+        let whereClause = {}
+        if (kostId) whereClause['id'] = kostId;
 
         const rooms = await Room.findAll({
             include: [
                 {
                     model: BoardingHouse, // Include the associated BoardingHouse
+                    where: whereClause,
                     attributes: ['id', 'name', 'address']
                 },
                 {
@@ -50,7 +54,6 @@ exports.getAllRooms = async (req, res) => {
 
             return roomData;
         });
-
 
         if (!formattedRooms || formattedRooms.length === 0) {
             return res.status(404).json({
@@ -129,6 +132,7 @@ exports.createRoom = async (req, res) => {
     try {
         const {
             boardingHouseId,
+            priceId,
             roomNumber,
             roomSize, // Optional, defaults to 'Standard'
             roomStatus,
@@ -136,10 +140,10 @@ exports.createRoom = async (req, res) => {
         } = req.body;
 
         // Basic validation
-        if (!boardingHouseId || !roomNumber || !roomStatus) {
+        if (!boardingHouseId || !priceId || !roomNumber || !roomStatus) {
             return res.status(400).json({
                 success: false,
-                message: 'Required fields (boardingHouseId, roomNumber, roomStatus) are missing.'
+                message: 'Required fields (boardingHouseId, priceId, roomNumber, roomStatus) are missing.'
             });
         }
 
@@ -152,9 +156,18 @@ exports.createRoom = async (req, res) => {
             });
         }
 
+        const priceExists = await Price.findByPk(priceId);
+        if (!priceExists) {
+            return res.status(404).json({
+                success: false,
+                message: `Price with ID ${priceId} not found.`
+            });
+        }
+
         // Create the room
         const newRoom = await Room.create({
             boardingHouseId,
+            priceId,
             roomNumber,
             roomSize, // Use provided value or let model default handle it if not provided
             roomStatus,
@@ -170,7 +183,13 @@ exports.createRoom = async (req, res) => {
                     model: BoardingHouse,
                     attributes: ['id', 'name', 'address']
                 }
-            ]
+            ],
+            include: [
+                {
+                    model: Price,
+                    attributes: ['id', 'name', 'amount']
+                }
+            ],
         });
 
 
@@ -190,7 +209,7 @@ exports.createRoom = async (req, res) => {
             return res.status(400).json({
                 success: false,
                 message: 'Validation error creating room',
-                errors: error.errors.map(err => err.message)
+                error: error.errors.map(err => err.message)
             });
         }
         // Handle other potential errors

@@ -36,7 +36,19 @@ exports.createTenant = async (req, res) => {
     } catch (error) {
         logger.error(`❌ createTenant error: ${error.message}`);
         logger.error(error.stack);
-        res.status(400).json({ error: 'Bad Request' });
+        // Handle Sequelize validation errors specifically
+        if (error.name === 'SequelizeValidationError') {
+            return res.status(400).json({
+                success: false,
+                message: 'Validation error creating room',
+                error: error.errors.map(err => err.message)
+            });
+        }
+        res.status(500).json({
+            success: false,
+            message: 'Error creating room',
+            error: error.message
+        });
     }
 };
 
