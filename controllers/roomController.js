@@ -1,4 +1,4 @@
-const { BoardingHouse, Price, Room, AdditionalPrice, OtherCost, Tenant, Payment, RoomPrice } = require('../models');
+const { BoardingHouse, Price, Room, Tenant, Payment } = require('../models');
 const logger = require('../config/logger');
 
 exports.getAllRooms = async (req, res) => {
@@ -63,10 +63,6 @@ exports.getAllRooms = async (req, res) => {
         });
 
 
-
-
-
-
         // The fetched room objects now directly contain the included BoardingHouse and Price objects
         res.status(200).json({
             success: true,
@@ -81,57 +77,136 @@ exports.getAllRooms = async (req, res) => {
     }
 };
 
+// Method to get a single room by its ID with associations
 exports.getRoomById = async (req, res) => {
     try {
-        const { id } = req.params;
+        const { id } = req.params; // Extract the room ID from request parameters
 
-        // Find room with related AdditionalPrice, OtherCost, and latest Tenant
+        // Validate if ID is provided
+        if (!id) {
+            return res.status(400).json({
+                success: false,
+                message: 'Room ID is required',
+                data: null
+            });
+        }
+
+        // Find the room by primary key and include the associated data
         const room = await Room.findByPk(id, {
             include: [
                 {
-                    model: AdditionalPrice,
-                    as: 'AdditionalPrices',
+                    model: BoardingHouse,
+                    attributes: ['id', 'name', 'address']
                 },
                 {
-                    model: OtherCost,
-                    as: 'OtherCosts',
+                    model: Price,
+                    attributes: ['id', 'roomSize', 'amount', 'name', 'description']
                 },
                 {
-                    model: Tenant,
-                    as: 'Tenants',
-                    order: [['createdAt', 'DESC']],
-                    limit: 1,
+                    model: Tenant, // Include associated Tenants
+                    as: 'Tenants', // Use the alias defined in the association
+                    where: {
+                        tenancyStatus: 'Active' // Filter for active tenants
+                    },
+                    order: [
+                        ['startDate', 'DESC'],
+                        ['createdAt', 'DESC']
+                    ],
+                    limit: 1, // Limit to 1 tenant
+                    required: false, // Use false (LEFT JOIN) so rooms without active tenants are also included
+                    include: [
+                        {
+                            model: Payment,
+                            attributes: ['id', 'totalAmount', 'paymentDate', 'paymentStatus', 'description']
+                        }
+                    ]
                 }
             ]
         });
 
+        // Check if the room was found
         if (!room) {
-            return res.status(404).json({ error: 'Room not found' });
+            return res.status(404).json({
+                success: false,
+                message: 'Room not found',
+                data: null
+            });
         }
 
-        // Calculate total price
-        const basicPrice = room.basicPrice || 0;
-        const additionalPriceTotal = room.AdditionalPrices.reduce((sum, item) => sum + item.amount, 0);
-        const otherCostTotal = room.OtherCosts.reduce((sum, item) => sum + item.amount, 0);
-        const totalPrice = basicPrice + additionalPriceTotal + otherCostTotal;
+        // Format the room data similarly to getAllRooms to include latestTenant
+        const roomData = room.toJSON(); // Get plain JSON object
 
-        // Get the latest tenant if available
-        const latestTenant = room.Tenants.length > 0 ? room.Tenants[0] : null;
-
-        let response = {
-            ...room.get({ plain: true }),
-            totalPrice,
-            latestTenant,
+        if (roomData.Tenants && roomData.Tenants.length > 0) {
+            roomData.latestTenant = roomData.Tenants[0];
+            delete roomData.Tenants;
+        } else {
+            roomData.latestTenant = null;
+            delete roomData.Tenants;
         }
 
-        const { Tenants, ...newResponse } = response
 
-        res.json(newResponse);
+        res.status(200).json({
+            success: true,
+            message: 'Room retrieved successfully with latest active tenant',
+            data: roomData
+        });
+
     } catch (error) {
         logger.error(`❌ getRoomById error: ${error.message}`);
         logger.error(error.stack);
         res.status(500).json({ error: 'Internal Server Error' });
     }
+
+    // try {
+    //     const { id } = req.params;
+
+    //     // Find room with related AdditionalPrice, OtherCost, and latest Tenant
+    //     const room = await Room.findByPk(id, {
+    //         include: [
+    //             {
+    //                 model: AdditionalPrice,
+    //                 as: 'AdditionalPrices',
+    //             },
+    //             {
+    //                 model: OtherCost,
+    //                 as: 'OtherCosts',
+    //             },
+    //             {
+    //                 model: Tenant,
+    //                 as: 'Tenants',
+    //                 order: [['createdAt', 'DESC']],
+    //                 limit: 1,
+    //             }
+    //         ]
+    //     });
+
+    //     if (!room) {
+    //         return res.status(404).json({ error: 'Room not found' });
+    //     }
+
+    //     // Calculate total price
+    //     const basicPrice = room.basicPrice || 0;
+    //     const additionalPriceTotal = room.AdditionalPrices.reduce((sum, item) => sum + item.amount, 0);
+    //     const otherCostTotal = room.OtherCosts.reduce((sum, item) => sum + item.amount, 0);
+    //     const totalPrice = basicPrice + additionalPriceTotal + otherCostTotal;
+
+    //     // Get the latest tenant if available
+    //     const latestTenant = room.Tenants.length > 0 ? room.Tenants[0] : null;
+
+    //     let response = {
+    //         ...room.get({ plain: true }),
+    //         totalPrice,
+    //         latestTenant,
+    //     }
+
+    //     const { Tenants, ...newResponse } = response
+
+    //     res.json(newResponse);
+    // } catch (error) {
+    //     logger.error(`❌ getRoomById error: ${error.message}`);
+    //     logger.error(error.stack);
+    //     res.status(500).json({ error: 'Internal Server Error' });
+    // }
 };
 
 exports.createRoom = async (req, res) => {
