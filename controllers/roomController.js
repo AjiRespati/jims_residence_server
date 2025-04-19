@@ -45,94 +45,6 @@ exports.getAllRooms = async (req, res) => {
             data: rooms
         });
 
-        // const { kostId } = req.params;
-        // let whereClause = {}
-        // if (kostId) whereClause['id'] = kostId;
-
-        // const rooms = await Room.findAll({
-        //     include: [
-        //         {
-        //             model: BoardingHouse, // Include the associated BoardingHouse
-        //             where: whereClause,
-        //             attributes: ['id', 'name', 'address'],
-        //             include: [
-        //                 {
-        //                     model: Price,
-        //                     attributes: ['id', 'roomSize', 'amount', 'name', 'description'], // Specify attributes for Price
-        //                     where: { status: 'active' }, // Optionally filter for active prices
-        //                     required: false // Use a left join, so rooms without prices for their BH are still returned
-        //                 }
-        //             ]
-        //         },
-        //         {
-        //             model: Tenant, // Include associated Tenants
-        //             as: 'Tenants', // Use the alias defined in the association (if any, usually the plural name)
-        //             where: {
-        //                 tenancyStatus: 'Active' // Filter for active tenants
-        //             },
-        //             order: [
-        //                 // Order tenants by a date field descending to get the latest first
-        //                 // Assuming 'startDate' or 'createdAt' indicates the start/creation date
-        //                 ['startDate', 'DESC'], // Or use ['createdAt', 'DESC'] depending on which is the "latest" indicator
-        //                 ['createdAt', 'DESC'] // Fallback order
-        //             ],
-        //             limit: 1, // Limit to 1 tenant per room after ordering (this is important for performance and getting "a" latest one)
-        //             required: false // Use false (LEFT JOIN) so rooms without active tenants are also included
-        //         }
-        //     ]
-        // });
-
-        // // Optional post-processing: Format the tenants array to just the single latest tenant object
-        // // The `limit: 1` in the include *should* handle this, but let's ensure the structure is clean.
-        // const formattedRooms = rooms.map(room => {
-        //     const roomData = room.toJSON(); // Get plain JSON object
-
-        //     // Check if tenants were included and if there's at least one (the latest active one)
-        //     if (roomData.Tenants && roomData.Tenants.length > 0) {
-        //         // Replace the Tenants array with the single latest tenant object
-        //         roomData.latestActiveTenant = roomData.Tenants[0];
-        //         delete roomData.Tenants; // Remove the original array key
-        //     } else {
-        //         // If no active tenants, set latestActiveTenant to null
-        //         roomData.latestActiveTenant = null;
-        //         delete roomData.Tenants; // Remove the original array key
-        //     }
-
-        //     let specificPrice = null;
-        //     // Check if the BoardingHouse and its Prices were included
-        //     if (roomData.BoardingHouse && roomData.BoardingHouse.Prices) {
-        //         // Find the price in the BoardingHouse's Prices array that matches the room's size
-        //         specificPrice = roomData.BoardingHouse.Prices.find(price => price.roomSize === roomData.roomSize);
-
-        //         // Attach the found specific price to the room object
-        //         roomData.price = specificPrice;
-
-        //         // Optionally, remove the full Prices array from the BoardingHouse object in the response
-        //         // if you only want the specific price at the top level of the room object.
-        //         delete roomData.BoardingHouse.Prices;
-        //     }
-
-        //     // flat BoardingHouse
-        //     roomData.boardingHouseName = roomData.BoardingHouse.name;
-        //     delete roomData.BoardingHouse;
-
-        //     console.log(`❌ getAllRooms: ${JSON.stringify(roomData)}`);
-        //     return roomData;
-        // });
-
-        // if (!formattedRooms || formattedRooms.length === 0) {
-        //     return res.status(404).json({
-        //         success: false,
-        //         message: 'No rooms found'
-        //     });
-        // }
-
-        // res.status(200).json({
-        //     success: true,
-        //     message: 'Rooms retrieved successfully with latest active tenant',
-        //     data: formattedRooms
-        // });
-
     } catch (error) {
         logger.error(`❌ getAllRooms error: ${error.message}`);
         logger.error(error.stack);
@@ -230,7 +142,7 @@ exports.createRoom = async (req, res) => {
             boardingHouseId,
             priceId, // Use the provided priceId
             roomNumber,
-            roomSize, // Still includes roomSize based on your model
+            // roomSize, // Still includes roomSize based on your model
             roomStatus,
             description,
             createBy: req.user.username
@@ -256,46 +168,6 @@ exports.createRoom = async (req, res) => {
         // With the new relation, including them directly in the room object is cleaner.
         // We will return the created room object which has the included associations.
         res.status(200).json(createdRoomWithAssociations);
-
-
-        // const { boardingHouseId, roomNumber, roomSize, roomStatus, description } = req.body;
-
-        // // Basic validation
-        // if (!boardingHouseId || !roomNumber || !roomSize || !roomStatus) {
-        //     return res.status(400).json({ message: 'Required fields are missing: boardingHouseId, roomNumber, roomSize, roomStatus' });
-        // }
-
-        // // Check if the boarding house exists
-        // const boardingHouse = await BoardingHouse.findByPk(boardingHouseId);
-        // if (!boardingHouse) {
-        //     return res.status(404).json({ message: 'Boarding House not found' });
-        // }
-
-        // // Create the room
-        // const newRoom = await Room.create({
-        //     boardingHouseId,
-        //     roomNumber,
-        //     roomSize,
-        //     roomStatus,
-        //     description,
-        //     createBy: req.user.username
-        // });
-
-        // // Find the relevant price for this boarding house and room size
-        // const price = await Price.findOne({
-        //     where: {
-        //         boardingHouseId: boardingHouseId,
-        //         roomSize: roomSize,
-        //         status: 'active' // Optionally filter for active prices
-        //     }
-        // });
-
-        // // Return the created room, boarding house, and price
-        // res.status(200).json({
-        //     room: newRoom,
-        //     boardingHouse: boardingHouse,
-        //     price: price // Will be null if no matching price is found
-        // });
 
     } catch (error) {
         console.error('Error creating room:', error);

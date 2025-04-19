@@ -4,7 +4,6 @@ module.exports = (sequelize, DataTypes) => {
         boardingHouseId: { type: DataTypes.UUID, allowNull: false },
         priceId: { type: DataTypes.UUID, allowNull: false },
         roomNumber: { type: DataTypes.STRING, allowNull: false },
-        roomSize: { type: DataTypes.ENUM('Small', 'Standard', 'Big'), allowNull: false, defaultValue: "Standard" },
         roomStatus: { type: DataTypes.ENUM('Tersedia', 'Terisi', 'Pemeliharaan', 'Rusak'), allowNull: false },
         description: { type: DataTypes.TEXT },
         createBy: { type: DataTypes.STRING },
