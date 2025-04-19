@@ -11,8 +11,6 @@ module.exports = (sequelize, DataTypes) => {
         startDate: { type: DataTypes.DATE },
         dueDate: { type: DataTypes.DATE },
         banishDate: { type: DataTypes.DATE },
-        paymentDate: { type: DataTypes.DATE },
-        paymentStatus: { type: DataTypes.ENUM('unpaid', 'paid') },
         createBy: { type: DataTypes.STRING },
         updateBy: { type: DataTypes.STRING }
     }, { timestamps: true });

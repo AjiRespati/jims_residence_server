@@ -1,4 +1,4 @@
-const { BoardingHouse, Price, Room, AdditionalPrice, OtherCost, Tenant, } = require('../models');
+const { BoardingHouse, Price, Room, AdditionalPrice, OtherCost, Tenant, Payment, RoomPrice } = require('../models');
 const logger = require('../config/logger');
 
 exports.getAllRooms = async (req, res) => {
@@ -32,17 +32,46 @@ exports.getAllRooms = async (req, res) => {
                         ['createdAt', 'DESC'] // Fallback order
                     ],
                     limit: 1, // Limit to 1 tenant per room after ordering (this is important for performance and getting "a" latest one)
-                    required: false // Use false (LEFT JOIN) so rooms without active tenants are also included
+                    required: false, // Use false (LEFT JOIN) so rooms without active tenants are also included
+                    include: [
+                        {
+                            model: Payment,
+                            attributes: ['id', 'totalAmount', 'paymentDate', 'paymentStatus', 'description'] // Specify attributes for Price
+
+                        }
+                    ]
                 }
 
             ]
         });
 
+        const formattedRooms = rooms.map(room => {
+            const roomData = room.toJSON(); // Get plain JSON object
+
+            // Check if tenants were included and if there's at least one (the latest active one)
+            if (roomData.Tenants && roomData.Tenants.length > 0) {
+                // Replace the Tenants array with the single latest tenant object
+                roomData.latestTenant = roomData.Tenants[0];
+                delete roomData.Tenants; // Remove the original array key
+            } else {
+                // If no active tenants, set latestActiveTenant to null
+                roomData.latestTenant = null;
+                delete roomData.Tenants; // Remove the original array key
+            }
+
+            return roomData;
+        });
+
+
+
+
+
+
         // The fetched room objects now directly contain the included BoardingHouse and Price objects
-        res.status(200).json({            
+        res.status(200).json({
             success: true,
             message: 'Rooms retrieved successfully with latest active tenant',
-            data: rooms
+            data: formattedRooms
         });
 
     } catch (error) {

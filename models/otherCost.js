@@ -2,7 +2,7 @@ module.exports = (sequelize, DataTypes) => {
     const OtherCost = sequelize.define("OtherCost", {
         id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
         paymentId: { type: DataTypes.UUID, allowNull: false },
-        price: { type: DataTypes.FLOAT, allowNull: false },
+        amount: { type: DataTypes.FLOAT, allowNull: false },
         name: { type: DataTypes.STRING },
         description: { type: DataTypes.TEXT },
         createBy: { type: DataTypes.STRING },

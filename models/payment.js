@@ -2,12 +2,13 @@ module.exports = (sequelize, DataTypes) => {
     const Payment = sequelize.define("Payment", {
         id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
         tenantId: { type: DataTypes.UUID, allowNull: false },
-        // roomId: { type: DataTypes.UUID, allowNull: false },
-        amount: { type: DataTypes.FLOAT, allowNull: false },
+        totalAmount: { type: DataTypes.FLOAT, allowNull: false },
         transactionType: { type: DataTypes.ENUM('debit', 'credit'), allowNull: false },
         transactionImagePath: { type: DataTypes.STRING },
         description: { type: DataTypes.TEXT },
-        updateBy: { type: DataTypes.STRING }
+        updateBy: { type: DataTypes.STRING },
+        paymentDate: { type: DataTypes.DATE },
+        paymentStatus: { type: DataTypes.ENUM('unpaid', 'paid') },
     }, { timestamps: true });
 
     Payment.associate = (models) => {
