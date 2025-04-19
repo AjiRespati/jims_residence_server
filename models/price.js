@@ -12,8 +12,8 @@ module.exports = (sequelize, DataTypes) => {
     }, { timestamps: true });
 
     Price.associate = (models) => {
-        // Price.hasMany(models.Room, { foreignKey: "priceId" });
         Price.belongsTo(models.BoardingHouse, { foreignKey: 'boardingHouseId' });
+        Price.hasMany(models.Room, { foreignKey: "priceId" });
     };
 
     return Price;
