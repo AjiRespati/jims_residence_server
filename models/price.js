@@ -1,6 +1,7 @@
 module.exports = (sequelize, DataTypes) => {
     const Price = sequelize.define("Price", {
         id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
+        boardingHouseId: { type: DataTypes.UUID, allowNull: false },
         roomSize: { type: DataTypes.ENUM('Small', 'Standard', 'Big'), allowNull: false },
         name: { type: DataTypes.STRING, allowNull: false  },
         amount: { type: DataTypes.FLOAT, allowNull: false },
@@ -11,7 +12,8 @@ module.exports = (sequelize, DataTypes) => {
     }, { timestamps: true });
 
     Price.associate = (models) => {
-        Price.hasMany(models.Room, { foreignKey: "priceId" });
+        // Price.hasMany(models.Room, { foreignKey: "priceId" });
+        Price.belongsTo(models.BoardingHouse, { foreignKey: 'boardingHouseId' });
     };
 
     return Price;

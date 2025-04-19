@@ -9,6 +9,7 @@ module.exports = (sequelize, DataTypes) => {
 
     BoardingHouse.associate = (models) => {
         BoardingHouse.hasMany(models.Room, { foreignKey: "boardingHouseId" });
+        BoardingHouse.hasMany(models.Price, { foreignKey: "boardingHouseId" });
     };
 
     return BoardingHouse;

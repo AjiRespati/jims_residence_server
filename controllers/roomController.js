@@ -132,7 +132,6 @@ exports.createRoom = async (req, res) => {
     try {
         const {
             boardingHouseId,
-            priceId,
             roomNumber,
             roomSize, // Optional, defaults to 'Standard'
             roomStatus,
@@ -140,7 +139,7 @@ exports.createRoom = async (req, res) => {
         } = req.body;
 
         // Basic validation
-        if (!boardingHouseId || !priceId || !roomNumber || !roomStatus) {
+        if (!boardingHouseId || !roomNumber || !roomStatus) {
             return res.status(400).json({
                 success: false,
                 message: 'Required fields (boardingHouseId, priceId, roomNumber, roomStatus) are missing.'
@@ -156,13 +155,6 @@ exports.createRoom = async (req, res) => {
             });
         }
 
-        const priceExists = await Price.findByPk(priceId);
-        if (!priceExists) {
-            return res.status(404).json({
-                success: false,
-                message: `Price with ID ${priceId} not found.`
-            });
-        }
 
         // Create the room
         const newRoom = await Room.create({

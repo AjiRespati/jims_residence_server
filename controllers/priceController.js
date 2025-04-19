@@ -1,22 +1,36 @@
-const { Price, Room } = require('../models');
+const { Price, BoardingHouse } = require('../models');
 const logger = require('../config/logger');
 
 exports.getAllPrices = async (req, res) => {
     try {
-        const data = await Price.findAll();
+        const prices = await Price.findAll({
+            include: [
+                {
+                    model: BoardingHouse, // Include the associated BoardingHouse
+                    attributes: ['id', 'name', 'address']
+                }
+            ]
+        });
 
-
-        if (data.length === 0) {
+        if (prices.length === 0) {
             return res.status(404).json({
                 success: false,
                 message: 'No prices found'
             });
         }
 
+        const formattedPrices = prices.map(price => {
+            const priceData = price.toJSON();
+            // flattened BoardingHouse
+            priceData.boardingHouseName = priceData.BoardingHouse.name;
+            delete priceData.BoardingHouse;
+            return priceData;
+        });
+
         res.json({
             success: true,
             message: 'Get Prices successfully',
-            data: data // Respond with the created room including association
+            data: formattedPrices // Respond with the created room including association
         });
     } catch (error) {
         logger.error(`❌ getAllPrices error: ${error.message}`);
@@ -43,14 +57,14 @@ exports.createPrice = async (req, res) => {
             roomSize,
             amount,
             name,
-            description
+            boardingHouseId
         } = req.body;
 
         // Basic validation
-        if (!roomSize || !amount || !name) {
+        if (!roomSize || !amount || !name || !boardingHouseId) {
             return res.status(400).json({
                 success: false,
-                message: 'Required fields (roomSize, amount, or name) are missing.'
+                message: 'Required fields (boardingHouseId, roomSize, amount, or name) are missing.'
             });
         }
 
