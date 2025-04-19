@@ -1,5 +1,7 @@
 const express = require('express');
 const router = express.Router();
+const authMiddleware = require("../middleware/authMiddleware");
+
 const {
     getAllTenants,
     getTenantById,
@@ -8,10 +10,10 @@ const {
     deleteTenant
 } = require('../controllers/tenantController');
 
-router.get('/', getAllTenants);
-router.get('/:id', getTenantById);
-router.post('/', createTenant);
-router.put('/:id', updateTenant);
-router.delete('/:id', deleteTenant);
+router.get('/', authMiddleware, getAllTenants);
+router.get('/:id', authMiddleware, getTenantById);
+router.post('/', authMiddleware, createTenant);
+router.put('/:id', authMiddleware, updateTenant);
+router.delete('/:id', authMiddleware, deleteTenant);
 
 module.exports = router;

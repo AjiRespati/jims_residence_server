@@ -1,5 +1,7 @@
 const express = require('express');
 const router = express.Router();
+const authMiddleware = require("../middleware/authMiddleware");
+
 const {
     getAllRoomPrices,
     getRoomPriceById,
@@ -8,10 +10,10 @@ const {
     deleteRoomPrice
 } = require('../controllers/roomPriceController');
 
-router.get('/', getAllRoomPrices);
-router.get('/:id', getRoomPriceById);
-router.post('/', createRoomPrice);
-router.put('/:id', updateRoomPrice);
-router.delete('/:id', deleteRoomPrice);
+router.get('/', authMiddleware, getAllRoomPrices);
+router.get('/:id', authMiddleware, getRoomPriceById);
+router.post('/', authMiddleware, createRoomPrice);
+router.put('/:id', authMiddleware, updateRoomPrice);
+router.delete('/:id', authMiddleware, deleteRoomPrice);
 
 module.exports = router;

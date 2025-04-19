@@ -1,5 +1,7 @@
 const express = require('express');
 const router = express.Router();
+const authMiddleware = require("../middleware/authMiddleware");
+
 const {
     getAllAdditionalPrices,
     getAdditionalPriceById,
@@ -8,10 +10,10 @@ const {
     deleteAdditionalPrice
 } = require('../controllers/additionalPriceController');
 
-router.get('/', getAllAdditionalPrices);
-router.get('/:id', getAdditionalPriceById);
-router.post('/', createAdditionalPrice);
-router.put('/:id', updateAdditionalPrice);
-router.delete('/:id', deleteAdditionalPrice);
+router.get('/', authMiddleware, getAllAdditionalPrices);
+router.get('/:id', authMiddleware, getAdditionalPriceById);
+router.post('/', authMiddleware, createAdditionalPrice);
+router.put('/:id', authMiddleware, updateAdditionalPrice);
+router.delete('/:id', authMiddleware, deleteAdditionalPrice);
 
 module.exports = router;

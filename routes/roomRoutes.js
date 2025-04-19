@@ -1,5 +1,7 @@
 const express = require('express');
 const router = express.Router();
+const authMiddleware = require("../middleware/authMiddleware");
+
 const {
     getAllRooms,
     getRoomById,
@@ -8,10 +10,10 @@ const {
     deleteRoom
 } = require('../controllers/roomController');
 
-router.get('/', getAllRooms);
-router.get('/:id', getRoomById);
-router.post('/', createRoom);
-router.put('/:id', updateRoom);
-router.delete('/:id', deleteRoom);
+router.get('/', authMiddleware, getAllRooms);
+router.get('/:id', authMiddleware, getRoomById);
+router.post('/', authMiddleware, createRoom);
+router.put('/:id', authMiddleware, updateRoom);
+router.delete('/:id', authMiddleware, deleteRoom);
 
 module.exports = router;

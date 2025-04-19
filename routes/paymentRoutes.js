@@ -1,5 +1,7 @@
 const express = require('express');
 const router = express.Router();
+const authMiddleware = require("../middleware/authMiddleware");
+
 const {
     getAllPayments,
     getPaymentById,
@@ -8,10 +10,10 @@ const {
     deletePayment
 } = require('../controllers/paymentController');
 
-router.get('/', getAllPayments);
-router.get('/:id', getPaymentById);
-router.post('/', createPayment);
-router.put('/:id', updatePayment);
-router.delete('/:id', deletePayment);
+router.get('/', authMiddleware, getAllPayments);
+router.get('/:id', authMiddleware, getPaymentById);
+router.post('/', authMiddleware, createPayment);
+router.put('/:id', authMiddleware, updatePayment);
+router.delete('/:id', authMiddleware, deletePayment);
 
 module.exports = router;

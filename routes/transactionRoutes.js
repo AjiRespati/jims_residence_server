@@ -1,5 +1,7 @@
 const express = require('express');
 const router = express.Router();
+const authMiddleware = require("../middleware/authMiddleware");
+
 const {
     getAllTransactions,
     getTransactionById,
@@ -8,10 +10,10 @@ const {
     deleteTransaction
 } = require('../controllers/transactionController');
 
-router.get('/', getAllTransactions);
-router.get('/:id', getTransactionById);
-router.post('/', createTransaction);
-router.put('/:id', updateTransaction);
-router.delete('/:id', deleteTransaction);
+router.get('/', authMiddleware, getAllTransactions);
+router.get('/:id', authMiddleware, getTransactionById);
+router.post('/', authMiddleware, createTransaction);
+router.put('/:id', authMiddleware, updateTransaction);
+router.delete('/:id', authMiddleware, deleteTransaction);
 
 module.exports = router;

@@ -1,5 +1,7 @@
 const express = require('express');
 const router = express.Router();
+const authMiddleware = require("../middleware/authMiddleware");
+
 const {
     getAllRoomHistorys,
     getRoomHistoryById,
@@ -8,10 +10,10 @@ const {
     deleteRoomHistory
 } = require('../controllers/roomHistoryController');
 
-router.get('/', getAllRoomHistorys);
-router.get('/:id', getRoomHistoryById);
-router.post('/', createRoomHistory);
-router.put('/:id', updateRoomHistory);
-router.delete('/:id', deleteRoomHistory);
+router.get('/', authMiddleware, getAllRoomHistorys);
+router.get('/:id', authMiddleware, getRoomHistoryById);
+router.post('/', authMiddleware, createRoomHistory);
+router.put('/:id', authMiddleware, updateRoomHistory);
+router.delete('/:id', authMiddleware, deleteRoomHistory);
 
 module.exports = router;

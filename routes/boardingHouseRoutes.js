@@ -1,5 +1,7 @@
 const express = require('express');
 const router = express.Router();
+const authMiddleware = require("../middleware/authMiddleware");
+
 const {
     getAllBoardingHouses,
     getBoardingHouseById,
@@ -8,10 +10,10 @@ const {
     deleteBoardingHouse
 } = require('../controllers/boardingHouseController');
 
-router.get('/', getAllBoardingHouses);
-router.get('/:id', getBoardingHouseById);
-router.post('/', createBoardingHouse);
-router.put('/:id', updateBoardingHouse);
-router.delete('/:id', deleteBoardingHouse);
+router.get('/', authMiddleware, getAllBoardingHouses);
+router.get('/:id', authMiddleware, getBoardingHouseById);
+router.post('/', authMiddleware, createBoardingHouse);
+router.put('/:id', authMiddleware, updateBoardingHouse);
+router.delete('/:id', authMiddleware, deleteBoardingHouse);
 
 module.exports = router;
