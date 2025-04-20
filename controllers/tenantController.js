@@ -2,7 +2,7 @@ const db = require("../models");
 const sequelize = db.sequelize;
 // const Sequelize = db.Sequelize;
 
-const { Tenant, Room, Price, Payment, BoardingHouse, RoomPrice } = require('../models');
+const { Tenant, Room, Price, Payment, BoardingHouse } = require('../models');
 const logger = require('../config/logger');
 
 exports.getAllTenants = async (req, res) => {
@@ -40,97 +40,151 @@ exports.createTenant = async (req, res) => {
             NIKNumber,
             startDate,
             dueDate,
-            NIKImagePath,
-            isNIKCopyDone,
-            tenancyStatus,
-            paymentStatus
+            banishDate, // Optional
+            NIKImagePath, // Optional
+            isNIKCopyDone, // Optional, defaults in model
+            tenancyStatus, // Optional, defaults in model
+            createBy,
+            updateBy
+            // paymentDate and paymentStatus are now on the Payment model
         } = req.body;
 
-        // Basic validation
-        if (!roomId || !name || !phone || !NIKNumber || !startDate || !dueDate) {
+        // Basic validation for mandatory tenant fields
+        if (!roomId || !name || !phone || !NIKNumber) {
             await t.rollback(); // Rollback transaction before sending error
-            return res.status(400).json({ message: 'Required fields are missing: roomId, name, phone, NIKNumber, startDate, dueDate' });
+            return res.status(400).json({ message: 'Required tenant fields are missing: roomId, name, phone, NIKNumber' });
         }
 
-        // 1. Fetch the Room and its associated Price within the transaction
-        const roomWithPrice = await Room.findByPk(roomId, {
-            include: {
-                model: Price,
-                attributes: ['id', 'name', 'amount', 'roomSize'], // Include necessary price attributes
-                where: { status: 'active' }, // Only consider active prices
-                required: true // This makes it an INNER JOIN, ensuring we only proceed if an active price exists
-            },
+        // 1. Fetch the Room and its associated ACTIVE Price, AdditionalPrices, and OtherCosts within the transaction
+        // We need more attributes now for the individual payment descriptions
+        const roomWithCosts = await db.Room.findByPk(roomId, {
+            include: [
+                {
+                    model: db.Price,
+                    attributes: ['id', 'name', 'amount', 'roomSize', 'description'], // Get attributes for description
+                    where: { status: 'active' },
+                    required: true, // Require an active price
+                },
+                {
+                    model: db.AdditionalPrice,
+                    attributes: ['id', 'name', 'amount', 'description'], // Get attributes for description
+                    where: { status: 'active' },
+                    required: false,
+                },
+                {
+                    model: db.OtherCost,
+                    attributes: ['id', 'name', 'amount', 'description'], // Get attributes for description
+                    where: { status: 'active' },
+                    required: false,
+                }
+            ],
             transaction: t // Include the transaction
         });
 
-        if (!roomWithPrice || !roomWithPrice.Price) {
+        // Validate if room was found and has an active price
+        if (!roomWithCosts || !roomWithCosts.Price) {
             await t.rollback(); // Rollback transaction
             return res.status(404).json({ message: 'Room not found or does not have an active price associated.' });
         }
 
-        const priceDetails = roomWithPrice.Price;
-
         // 2. Create the Tenant record
-        const newTenant = await Tenant.create({
+        const newTenant = await db.Tenant.create({
             roomId,
             name,
             phone,
             NIKNumber,
             startDate,
             dueDate,
+            banishDate,
             NIKImagePath,
             isNIKCopyDone,
-            tenancyStatus: tenancyStatus || 'Active', // Use provided status or default
-            createBy: req.user.username
-        }, { transaction: t }); // Include the transaction
-
-        // 3. Create the initial Payment record for the tenant's rent
-        const initialPayment = await Payment.create({
-            tenantId: newTenant.id, // Link to the new tenant
-            totalAmount: priceDetails.amount, // Use the amount from the fetched price
-            transactionType: 'debit', // Represents the amount owed by the tenant
-            paymentStatus: 'unpaid',
-            description: `Pembayaran pertama untuk kamar ${roomWithPrice.roomNumber}`, // Example description
-            createBy: req.user.username
-        }, { transaction: t }); // Include the transaction
-
-        // 4. Create the RoomPrice record linked to the Payment
-        // const roomPriceEntry = await RoomPrice.create({
-        await RoomPrice.create({
-            paymentId: initialPayment.id, // Link to the new payment
-            amount: priceDetails.amount, // Use the amount from the fetched price
-            name: priceDetails.name || `Room Price (${priceDetails.roomSize})`, // Use price name or generate one
-            description: `Room price details for ${priceDetails.roomSize} room`, // Example description
+            tenancyStatus: tenancyStatus || 'Active',
             createBy: req.user.username,
-            status: 'active', // Assuming this entry is active
+            updateBy: req.user.username,
         }, { transaction: t }); // Include the transaction
+
+        // 3. Prepare and create individual Payment records for each active cost component
+
+        const paymentsToCreate = [];
+
+        // Payment for the main Room Price
+        if (roomWithCosts.Price) {
+            paymentsToCreate.push({
+                tenantId: newTenant.id,
+                totalAmount: roomWithCosts.Price.amount, // Amount of this specific cost
+                transactionType: 'debit',
+                description: `${roomWithCosts.Price.name || 'Room Price'} (${roomWithCosts.Price.roomSize})`, // Detailed description
+                createBy: req.user.username,
+                updateBy: req.user.username,
+                timelimit: dueDate, // Due date for this payment
+                paymentDate: null,
+                paymentStatus: 'unpaid',
+            });
+        }
+
+        // Payments for Additional Prices
+        if (roomWithCosts.AdditionalPrices && roomWithCosts.AdditionalPrices.length > 0) {
+            roomWithCosts.AdditionalPrices.forEach(ap => {
+                paymentsToCreate.push({
+                    tenantId: newTenant.id,
+                    totalAmount: ap.amount, // Amount of this specific cost
+                    transactionType: 'debit',
+                    description: `${ap.name || 'Additional Cost'}: ${ap.description || ''}`, // Detailed description
+                    createBy: req.user.username,
+                    updateBy: req.user.username,
+                    timelimit: dueDate, // Due date for this payment (can be adjusted per cost type if needed)
+                    paymentDate: null,
+                    paymentStatus: 'unpaid',
+                });
+            });
+        }
+
+        // Payments for Other Costs
+        if (roomWithCosts.OtherCosts && roomWithCosts.OtherCosts.length > 0) {
+            roomWithCosts.OtherCosts.forEach(oc => {
+                paymentsToCreate.push({
+                    tenantId: newTenant.id,
+                    totalAmount: oc.amount, // Amount of this specific cost
+                    transactionType: 'debit',
+                    description: `${oc.name || 'Other Cost'}: ${oc.description || ''}`, // Detailed description
+                    createBy: req.user.username,
+                    updateBy: req.user.username,
+                    timelimit: dueDate, // Due date for this payment (can be adjusted per cost type if needed)
+                    paymentDate: null,
+                    paymentStatus: 'unpaid',
+                });
+            });
+        }
+
+        // Create all prepared payment records in bulk
+        await db.Payment.bulkCreate(paymentsToCreate, { transaction: t });
+        // const createdPayments = await db.Payment.bulkCreate(paymentsToCreate, { transaction: t });
+
 
         // If all operations were successful, commit the transaction
         await t.commit();
 
-        // Fetch the newly created Tenant with its associations for the response
-        const tenantWithDetails = await Tenant.findByPk(newTenant.id, {
+        // Fetch the newly created Tenant with its associated Payments for the response
+        // We will include all the payments created in this transaction
+        const tenantWithDetails = await db.Tenant.findByPk(newTenant.id, {
             include: [
                 {
-                    model: Room,
+                    model: db.Room,
                     attributes: ['id', 'roomNumber', 'roomStatus'],
-                    include: {
-                        model: BoardingHouse,
+                    include: { // Include BoardingHouse within Room for context
+                        model: db.BoardingHouse,
                         attributes: ['id', 'name']
                     }
                 },
                 {
-                    model: Payment,
-                    include: [
-                        {
-                            model: RoomPrice,
-                            attributes: ['id', 'name', 'amount']
-                        }
-                        // You might include AdditionalPrice and OtherCost here if needed
-                    ]
+                    model: db.Payment, // Include all associated Payments for this tenant
+                    attributes: ['id', 'totalAmount', 'transactionType', 'timelimit', 'paymentDate', 'paymentStatus', 'description', 'createBy', 'updateBy']
+                    // Optional: Filter payments created within a certain time frame if needed, but linking to new tenant ID is enough here
+                    // where: { createdAt: { [db.Sequelize.Op.gte]: t.finished } } // Example to filter payments created since transaction start
                 }
             ]
         });
+
         res.status(200).json(tenantWithDetails); // Return the created tenant with details
 
     } catch (error) {

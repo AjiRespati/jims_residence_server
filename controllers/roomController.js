@@ -7,70 +7,98 @@ const logger = require('../config/logger');
 
 exports.getAllRooms = async (req, res) => {
     try {
-        const { kostId } = req.params;
+                const { kostId } = req.params;
         let whereClause = {}
         if (kostId) whereClause['id'] = kostId;
 
-        // Find all rooms and include the associated BoardingHouse and Price directly
+        // Find all rooms and include the associated BoardingHouse, Price,
+        // and ONLY Active AdditionalPrice and OtherCost records
         const rooms = await Room.findAll({
             include: [
                 {
                     model: BoardingHouse,
                     where: whereClause,
-                    attributes: ['id', 'name', 'address'] // Specify attributes for BoardingHouse
+                    attributes: ['id', 'name', 'address']
                 },
                 {
                     model: Price,
-                    attributes: ['id', 'roomSize', 'amount', 'name', 'description'] // Specify attributes for Price
+                    attributes: ['id', 'roomSize', 'amount', 'name', 'description'] // Still fetch Price to get amount and roomSize
                 },
                 {
-                    model: Tenant, // Include associated Tenants
-                    as: 'Tenants', // Use the alias defined in the association (if any, usually the plural name)
-                    where: {
-                        tenancyStatus: 'Active' // Filter for active tenants
-                    },
-                    order: [
-                        // Order tenants by a date field descending to get the latest first
-                        // Assuming 'startDate' or 'createdAt' indicates the start/creation date
-                        ['startDate', 'DESC'], // Or use ['createdAt', 'DESC'] depending on which is the "latest" indicator
-                        ['createdAt', 'DESC'] // Fallback order
-                    ],
-                    limit: 1, // Limit to 1 tenant per room after ordering (this is important for performance and getting "a" latest one)
-                    required: false, // Use false (LEFT JOIN) so rooms without active tenants are also included
-                    include: [
-                        {
-                            model: Payment,
-                            attributes: ['id', 'totalAmount', 'paymentDate', 'paymentStatus', 'description'] // Specify attributes for Price
-
-                        }
-                    ]
+                    model: Tenant,
+                    as: 'Tenants',
+                    where: { tenancyStatus: 'Active' },
+                    order: [['startDate', 'DESC'], ['createdAt', 'DESC']],
+                    limit: 1,
+                    required: false,
+                    // include: [{ model: Payment, attributes: ['id', 'totalAmount', 'paymentDate', 'paymentStatus', 'description'] }]
+                },
+                {
+                    model: AdditionalPrice, // Include ONLY Active AdditionalPrice records for calculation
+                    attributes: ['amount'], // Only need the amount for calculation
+                    where: { status: 'active' },
+                    required: false // Use LEFT JOIN
+                },
+                {
+                    model: OtherCost, // Include ONLY Active OtherCost records for calculation
+                    attributes: ['amount'], // Only need the amount for calculation
+                    where: { status: 'active' },
+                    required: false // Use LEFT JOIN
                 }
-
             ]
         });
 
         const formattedRooms = rooms.map(room => {
             const roomData = room.toJSON(); // Get plain JSON object
 
-            // Check if tenants were included and if there's at least one (the latest active one)
-            if (roomData.Tenants && roomData.Tenants.length > 0) {
-                // Replace the Tenants array with the single latest tenant object
-                roomData.latestTenant = roomData.Tenants[0];
-                delete roomData.Tenants; // Remove the original array key
-            } else {
-                // If no active tenants, set latestActiveTenant to null
-                roomData.latestTenant = null;
-                delete roomData.Tenants; // Remove the original array key
+            let totalPrice = 0;
+            let roomSize = null;
+
+            // 1. Add Price amount and get roomSize
+            if (roomData.Price) {
+                totalPrice += roomData.Price.amount;
+                roomSize = roomData.Price.roomSize; // Get roomSize from Price
+                delete roomData.Price; // Remove the Price object from the final response
             }
+
+            // 2. Add sum of Active AdditionalPrice amounts
+            if (roomData.AdditionalPrices && roomData.AdditionalPrices.length > 0) {
+                const additionalPriceTotal = roomData.AdditionalPrices.reduce((sum, ap) => sum + ap.amount, 0);
+                totalPrice += additionalPriceTotal;
+                delete roomData.AdditionalPrices; // Remove the AdditionalPrices array from the final response
+            } else {
+                delete roomData.AdditionalPrices; // Remove the AdditionalPrices array if empty
+            }
+
+            // 3. Add sum of Active OtherCost amounts
+            if (roomData.OtherCosts && roomData.OtherCosts.length > 0) {
+                const otherCostTotal = roomData.OtherCosts.reduce((sum, oc) => sum + oc.amount, 0);
+                totalPrice += otherCostTotal;
+                delete roomData.OtherCosts; // Remove the OtherCosts array from the final response
+            } else {
+                delete roomData.OtherCosts; // Remove the OtherCosts array if empty
+            }
+
+
+            // Handle latestTenant formatting (kept from previous version)
+            if (roomData.Tenants && roomData.Tenants.length > 0) {
+                roomData.latestTenant = roomData.Tenants[0];
+                delete roomData.Tenants;
+            } else {
+                roomData.latestTenant = null;
+                delete roomData.Tenants;
+            }
+
+            // Add roomSize and calculated totalPrice to the room data
+            roomData.roomSize = roomSize;
+            roomData.totalPrice = totalPrice;
 
             return roomData;
         });
 
-
-        // The fetched room objects now directly contain the included BoardingHouse and Price objects
         res.status(200).json({
             success: true,
-            message: 'Rooms retrieved successfully with latest active tenant',
+            message: 'Rooms retrieved successfully with calculated total price',
             data: formattedRooms
         });
 
@@ -94,16 +122,17 @@ exports.getRoomById = async (req, res) => {
             });
         }
 
-        // Find the room by primary key and include the specified associated models
+        // 1. Find the room by primary key and include most specified associated models
+        // Include the latest active Tenant, but NOT their payments in this first query
         const room = await Room.findByPk(id, {
             include: [
                 {
                     model: BoardingHouse,
-                    attributes: ['id', 'name', 'address', 'description'] // Include relevant BH attributes
+                    attributes: ['id', 'name', 'address', 'description']
                 },
                 {
                     model: Price,
-                    attributes: ['id', 'roomSize', 'amount', 'name', 'description', 'status'] // Include relevant Price attributes
+                    attributes: ['id', 'roomSize', 'amount', 'name', 'description', 'status'] // Keep Price object for response
                 },
                 {
                     model: Tenant, // Include associated Tenants
@@ -115,26 +144,25 @@ exports.getRoomById = async (req, res) => {
                         ['startDate', 'DESC'], // Order to get the latest active tenant first
                         ['createdAt', 'DESC']
                     ],
-                    limit: 1, // Limit to only the latest active tenant
+                    limit: 1, // Still limit to only the latest active tenant here
                     required: false, // Use false (LEFT JOIN) so rooms without active tenants are still included
-                    include: [
-                        {
-                            model: Payment, // Include Payments for the latest active tenant
-                            attributes: ['id', 'totalAmount', 'paymentDate', 'paymentStatus', 'description', 'transactionType', 'transactionImagePath'] // Include relevant Payment attributes
-                            // You could include RoomPrice, AdditionalPrice, OtherCost nested here if needed from the Payment perspective
-                        }
-                    ]
+                    // *** DO NOT include Payments here ***
                 },
                 {
-                    model: AdditionalPrice, // Include ALL AdditionalPrice records for this room
-                    attributes: ['id', 'amount', 'name', 'description', 'status', 'createBy', 'updateBy'], // Include relevant attributes
-                    order: [['createdAt', 'ASC']] // Example order
+                    model: AdditionalPrice, // Include ONLY Active AdditionalPrice records
+                    attributes: ['id', 'amount', 'name', 'description', 'status', 'createBy', 'updateBy'],
+                    where: { status: 'active' },
+                    required: false,
+                    order: [['createdAt', 'ASC']]
                 },
                 {
-                    model: OtherCost, // Include ALL OtherCost records for this room
-                    attributes: ['id', 'amount', 'name', 'description', 'status', 'createBy', 'updateBy'], // Include relevant attributes
-                    order: [['createdAt', 'ASC']] // Example order
+                    model: OtherCost, // Include ONLY Active OtherCost records
+                    attributes: ['id', 'amount', 'name', 'description', 'status', 'createBy', 'updateBy'],
+                    where: { status: 'active' },
+                    required: false,
+                    order: [['createdAt', 'ASC']]
                 }
+                // RoomHistory is intentionally excluded
             ]
         });
 
@@ -149,17 +177,61 @@ exports.getRoomById = async (req, res) => {
 
         const roomData = room.toJSON();
 
+        // Process the Tenants array to get the single latestTenant object
+        // This mirrors the logic in getAllRooms
+        let latestTenant = null;
         if (roomData.Tenants && roomData.Tenants.length > 0) {
-            roomData.latestTenant = roomData.Tenants[0];
-            delete roomData.Tenants;
+            latestTenant = roomData.Tenants[0];
+            delete roomData.Tenants; // Remove the original array
         } else {
-            roomData.latestTenant = null;
-            delete roomData.Tenants;
+            delete roomData.Tenants; // Remove the original array if empty
         }
+
+        // 2. If a latest tenant was found, fetch ALL their payments in a separate query
+        if (latestTenant) {
+            const tenantPayments = await Payment.findAll({
+                where: { tenantId: latestTenant.id }, // Fetch payments for this specific tenant
+                attributes: ['id', 'totalAmount', 'transactionType', 'timelimit', 'paymentDate', 'paymentStatus', 'description', 'createBy', 'updateBy'], // Include relevant Payment attributes
+                order: [['createdAt', 'ASC']] // Example order for payments
+            });
+            // Attach the fetched payments array to the latestTenant object
+            latestTenant.Payments = tenantPayments;
+        }
+
+        // Attach the latestTenant object (now potentially with Payments) to the room data
+        roomData.latestTenant = latestTenant;
+
+
+        // Calculate totalPrice based on fetched active costs
+        let totalPrice = 0;
+
+        // 1. Add Price amount
+        if (roomData.Price) {
+            totalPrice += roomData.Price.amount;
+            // Keep Price object in roomData for getRoomById response
+        }
+
+        // 2. Add sum of Active AdditionalPrice amounts
+        if (roomData.AdditionalPrices && roomData.AdditionalPrices.length > 0) {
+            const additionalPriceTotal = roomData.AdditionalPrices.reduce((sum, ap) => sum + ap.amount, 0);
+            totalPrice += additionalPriceTotal;
+            // Keep AdditionalPrices array in roomData
+        }
+
+        // 3. Add sum of Active OtherCost amounts
+        if (roomData.OtherCosts && roomData.OtherCosts.length > 0) {
+            const otherCostTotal = roomData.OtherCosts.reduce((sum, oc) => sum + oc.amount, 0);
+            totalPrice += otherCostTotal;
+            // Keep OtherCosts array in roomData
+        }
+
+        // Add calculated totalPrice to the room data
+        roomData.totalPrice = totalPrice;
+
 
         res.status(200).json({
             success: true,
-            message: 'Room retrieved successfully with specified details',
+            message: 'Room retrieved successfully with specified details and calculated total price',
             data: roomData
         });
 
@@ -260,10 +332,9 @@ exports.updateRoom = async (req, res) => {
     // Start a transaction
     const t = await sequelize.transaction();
     try {
-        const { id } = req.params; // Room ID from URL
-        const { additionalPrices, otherCosts, ...roomUpdateData } = req.body; // Extract related data and room update data
+        const { id } = req.params;
+        const { additionalPrices, otherCosts, ...roomUpdateData } = req.body;
 
-        // Validate if ID is provided
         if (!id) {
             await t.rollback();
             return res.status(400).json({
@@ -273,7 +344,6 @@ exports.updateRoom = async (req, res) => {
             });
         }
 
-        // 1. Find the room to update within the transaction
         const room = await Room.findByPk(id, { transaction: t });
 
         if (!room) {
@@ -297,9 +367,6 @@ exports.updateRoom = async (req, res) => {
             const price = await Price.findOne({
                 where: {
                     id: roomUpdateData.priceId,
-                    // Optional: Check if the price belongs to the CURRENT or NEW boarding house
-                    // depending on your business logic. Here we check against the provided boardingHouseId if present,
-                    // otherwise against the room's current boardingHouseId.
                     boardingHouseId: roomUpdateData.boardingHouseId || room.boardingHouseId
                 },
                 transaction: t
@@ -310,8 +377,6 @@ exports.updateRoom = async (req, res) => {
             }
         }
 
-
-        // Filter req.body to get only valid Room attributes for update
         const validRoomUpdateFields = ['boardingHouseId', 'priceId', 'roomNumber', 'roomStatus', 'description', 'updateBy'];
         const roomFieldsToUpdate = {};
         validRoomUpdateFields.forEach(field => {
@@ -320,62 +385,85 @@ exports.updateRoom = async (req, res) => {
             }
         });
 
-
-        // 2. Update the Room record
-        await room.update(roomFieldsToUpdate, { transaction: t });
-
-        // 3. Create new AdditionalPrice records if provided
-        if (additionalPrices && Array.isArray(additionalPrices) && additionalPrices.length > 0) {
-            const additionalPriceData = additionalPrices.map(ap => ({
-                ...ap, // Copy properties from the request object
-                roomId: room.id, // Link to the updated room
-                // Ensure required fields for AdditionalPrice are present in 'ap' or default them
-                amount: ap.amount, // Assuming amount is mandatory and present
-                name: ap.name || 'Unnamed Additional Price', // Assuming name is mandatory or defaults
-                status: ap.status || 'active', // Default status if not provided
-                // createBy and updateBy should ideally come from the request context (e.g., authenticated user)
-                createBy:  req.user.username || 'System',
-                updateBy:  req.user.username || 'System',
-            }));
-            // Use bulkCreate for efficiency
-            await AdditionalPrice.bulkCreate(additionalPriceData, { transaction: t });
+        // 2. Update the Room record (only if there are fields to update)
+        if (Object.keys(roomFieldsToUpdate).length > 0) {
+            await room.update(roomFieldsToUpdate, { transaction: t });
         }
 
-        // 4. Create new OtherCost records if provided
-        if (otherCosts && Array.isArray(otherCosts) && otherCosts.length > 0) {
-            const otherCostData = otherCosts.map(oc => ({
-                ...oc, // Copy properties from the request object
-                roomId: room.id, // Link to the updated room
-                // Ensure required fields for OtherCost are present in 'oc' or default them
-                amount: oc.amount, // Assuming amount is mandatory and present
-                name: oc.name || 'Unnamed Other Cost', // Assuming name is mandatory or defaults
-                status: oc.status || 'active', // Default status if not provided
-                // createBy and updateBy should ideally come from the request context
-                createBy:  req.user.username || 'System',
-                updateBy:  req.user.username|| 'System',
-            }));
-            // Use bulkCreate for efficiency
-            await OtherCost.bulkCreate(otherCostData, { transaction: t });
+        // 3. Handle AdditionalPrice records (Update existing to inactive and Create new ones if array is provided)
+        if (additionalPrices !== undefined) { // Check if the additionalPrices array is present in the body
+            // Update all existing active AdditionalPrice records for this room to 'inactive'
+            await AdditionalPrice.update(
+                { status: 'inactive', updateBy: roomFieldsToUpdate.updateBy || 'System' },
+                { where: { roomId: room.id, status: 'active' }, transaction: t }
+            );
+
+            // If the incoming array is not empty, create new 'active' records
+            if (Array.isArray(additionalPrices) && additionalPrices.length > 0) {
+                const additionalPriceData = additionalPrices.map(ap => ({
+                    amount: ap.amount,
+                    name: ap.name || 'Unnamed Additional Price',
+                    description: ap.description,
+                    status: 'active', // Set status to active for new items
+                    createBy: req.user.username,
+                    updateBy: req.user.username,
+                    roomId: room.id,
+                }));
+                await AdditionalPrice.bulkCreate(additionalPriceData, { transaction: t });
+            }
+        }
+
+        // 4. Handle OtherCost records (Update existing to inactive and Create new ones if array is provided)
+        if (otherCosts !== undefined) { // Check if the otherCosts array is present in the body
+            // Update all existing active OtherCost records for this room to 'inactive'
+            await OtherCost.update(
+                { status: 'inactive', updateBy: roomFieldsToUpdate.updateBy || 'System' },
+                { where: { roomId: room.id, status: 'active' }, transaction: t }
+            );
+
+            // If the incoming array is not empty, create new 'active' records
+            if (Array.isArray(otherCosts) && otherCosts.length > 0) {
+                const otherCostData = otherCosts.map(oc => ({
+                    amount: oc.amount,
+                    name: oc.name || 'Unnamed Other Cost',
+                    description: oc.description,
+                    status: 'active', // Set status to active for new items
+                    createBy: req.user.username,
+                    updateBy: req.user.username,
+                    roomId: room.id,
+                }));
+                await OtherCost.bulkCreate(otherCostData, { transaction: t });
+            }
         }
 
 
         // If all operations succeeded, commit the transaction
         await t.commit();
 
-        // 5. Fetch the updated room with its primary associations for the response
+        // 5. Fetch the updated room with its primary associations AND the NEWLY ACTIVE lists for confirmation
         const updatedRoom = await Room.findByPk(room.id, {
             include: [
                 { model: BoardingHouse, attributes: ['id', 'name', 'address'] },
-                { model: Price, attributes: ['id', 'roomSize', 'amount', 'name', 'description'] }
-                // We don't include AdditionalPrice or OtherCost here to keep the response lean,
-                // but you can add them if needed. The user can call getRoomById to get everything.
+                { model: Price, attributes: ['id', 'roomSize', 'amount', 'name', 'description'] },
+                {
+                    model: AdditionalPrice,
+                    attributes: ['id', 'amount', 'name', 'description', 'status', 'createBy'],
+                    where: { status: 'active' }, // Fetch only active ones for the response
+                    required: false // Use LEFT JOIN
+                },
+                {
+                    model: OtherCost,
+                    attributes: ['id', 'amount', 'name', 'description', 'status', 'createBy'],
+                    where: { status: 'active' }, // Fetch only active ones for the response
+                    required: false // Use LEFT JOIN
+                }
             ]
         });
 
 
         res.status(200).json({
             success: true,
-            message: 'Room updated and related records created successfully',
+            message: 'Room and associated details updated successfully (status updated for old items)',
             data: updatedRoom
         });
 
