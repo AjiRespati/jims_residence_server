@@ -1,7 +1,7 @@
 module.exports = (sequelize, DataTypes) => {
     const AdditionalPrice = sequelize.define("AdditionalPrice", {
         id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
-        paymentId: { type: DataTypes.UUID, allowNull: false },
+        roomId: { type: DataTypes.UUID, allowNull: false },
         amount: { type: DataTypes.FLOAT, allowNull: false },
         name: { type: DataTypes.STRING },
         description: { type: DataTypes.TEXT },
@@ -11,7 +11,7 @@ module.exports = (sequelize, DataTypes) => {
     }, { timestamps: true });
 
     AdditionalPrice.associate = (models) => {
-        AdditionalPrice.belongsTo(models.Payment, { foreignKey: "paymentId" });
+        AdditionalPrice.belongsTo(models.Room, { foreignKey: 'roomId' });
     };
 
     return AdditionalPrice;

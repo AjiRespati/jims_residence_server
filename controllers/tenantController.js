@@ -43,7 +43,6 @@ exports.createTenant = async (req, res) => {
             NIKImagePath,
             isNIKCopyDone,
             tenancyStatus,
-            paymentDate,
             paymentStatus
         } = req.body;
 
@@ -82,8 +81,6 @@ exports.createTenant = async (req, res) => {
             NIKImagePath,
             isNIKCopyDone,
             tenancyStatus: tenancyStatus || 'Active', // Use provided status or default
-            // paymentDate,
-            // paymentStatus,
             createBy: req.user.username
         }, { transaction: t }); // Include the transaction
 
@@ -92,9 +89,8 @@ exports.createTenant = async (req, res) => {
             tenantId: newTenant.id, // Link to the new tenant
             totalAmount: priceDetails.amount, // Use the amount from the fetched price
             transactionType: 'debit', // Represents the amount owed by the tenant
-            paymentDate,
-            paymentStatus,
-            description: `Initial rent payment for room ${roomWithPrice.roomNumber}`, // Example description
+            paymentStatus: 'unpaid',
+            description: `Pembayaran pertama untuk kamar ${roomWithPrice.roomNumber}`, // Example description
             createBy: req.user.username
         }, { transaction: t }); // Include the transaction
 

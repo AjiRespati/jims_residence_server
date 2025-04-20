@@ -1,4 +1,8 @@
-const { BoardingHouse, Price, Room, Tenant, Payment } = require('../models');
+const db = require("../models");
+const sequelize = db.sequelize;
+// const Sequelize = db.Sequelize;
+
+const { BoardingHouse, Price, Room, Tenant, Payment, AdditionalPrice, OtherCost } = require('../models');
 const logger = require('../config/logger');
 
 exports.getAllRooms = async (req, res) => {
@@ -80,9 +84,8 @@ exports.getAllRooms = async (req, res) => {
 // Method to get a single room by its ID with associations
 exports.getRoomById = async (req, res) => {
     try {
-        const { id } = req.params; // Extract the room ID from request parameters
+        const { id } = req.params;
 
-        // Validate if ID is provided
         if (!id) {
             return res.status(400).json({
                 success: false,
@@ -91,16 +94,16 @@ exports.getRoomById = async (req, res) => {
             });
         }
 
-        // Find the room by primary key and include the associated data
+        // Find the room by primary key and include the specified associated models
         const room = await Room.findByPk(id, {
             include: [
                 {
                     model: BoardingHouse,
-                    attributes: ['id', 'name', 'address']
+                    attributes: ['id', 'name', 'address', 'description'] // Include relevant BH attributes
                 },
                 {
                     model: Price,
-                    attributes: ['id', 'roomSize', 'amount', 'name', 'description']
+                    attributes: ['id', 'roomSize', 'amount', 'name', 'description', 'status'] // Include relevant Price attributes
                 },
                 {
                     model: Tenant, // Include associated Tenants
@@ -109,17 +112,28 @@ exports.getRoomById = async (req, res) => {
                         tenancyStatus: 'Active' // Filter for active tenants
                     },
                     order: [
-                        ['startDate', 'DESC'],
+                        ['startDate', 'DESC'], // Order to get the latest active tenant first
                         ['createdAt', 'DESC']
                     ],
-                    limit: 1, // Limit to 1 tenant
-                    required: false, // Use false (LEFT JOIN) so rooms without active tenants are also included
+                    limit: 1, // Limit to only the latest active tenant
+                    required: false, // Use false (LEFT JOIN) so rooms without active tenants are still included
                     include: [
                         {
-                            model: Payment,
-                            attributes: ['id', 'totalAmount', 'paymentDate', 'paymentStatus', 'description']
+                            model: Payment, // Include Payments for the latest active tenant
+                            attributes: ['id', 'totalAmount', 'paymentDate', 'paymentStatus', 'description', 'transactionType', 'transactionImagePath'] // Include relevant Payment attributes
+                            // You could include RoomPrice, AdditionalPrice, OtherCost nested here if needed from the Payment perspective
                         }
                     ]
+                },
+                {
+                    model: AdditionalPrice, // Include ALL AdditionalPrice records for this room
+                    attributes: ['id', 'amount', 'name', 'description', 'status', 'createBy', 'updateBy'], // Include relevant attributes
+                    order: [['createdAt', 'ASC']] // Example order
+                },
+                {
+                    model: OtherCost, // Include ALL OtherCost records for this room
+                    attributes: ['id', 'amount', 'name', 'description', 'status', 'createBy', 'updateBy'], // Include relevant attributes
+                    order: [['createdAt', 'ASC']] // Example order
                 }
             ]
         });
@@ -133,8 +147,7 @@ exports.getRoomById = async (req, res) => {
             });
         }
 
-        // Format the room data similarly to getAllRooms to include latestTenant
-        const roomData = room.toJSON(); // Get plain JSON object
+        const roomData = room.toJSON();
 
         if (roomData.Tenants && roomData.Tenants.length > 0) {
             roomData.latestTenant = roomData.Tenants[0];
@@ -144,10 +157,9 @@ exports.getRoomById = async (req, res) => {
             delete roomData.Tenants;
         }
 
-
         res.status(200).json({
             success: true,
-            message: 'Room retrieved successfully with latest active tenant',
+            message: 'Room retrieved successfully with specified details',
             data: roomData
         });
 
@@ -156,57 +168,6 @@ exports.getRoomById = async (req, res) => {
         logger.error(error.stack);
         res.status(500).json({ error: 'Internal Server Error' });
     }
-
-    // try {
-    //     const { id } = req.params;
-
-    //     // Find room with related AdditionalPrice, OtherCost, and latest Tenant
-    //     const room = await Room.findByPk(id, {
-    //         include: [
-    //             {
-    //                 model: AdditionalPrice,
-    //                 as: 'AdditionalPrices',
-    //             },
-    //             {
-    //                 model: OtherCost,
-    //                 as: 'OtherCosts',
-    //             },
-    //             {
-    //                 model: Tenant,
-    //                 as: 'Tenants',
-    //                 order: [['createdAt', 'DESC']],
-    //                 limit: 1,
-    //             }
-    //         ]
-    //     });
-
-    //     if (!room) {
-    //         return res.status(404).json({ error: 'Room not found' });
-    //     }
-
-    //     // Calculate total price
-    //     const basicPrice = room.basicPrice || 0;
-    //     const additionalPriceTotal = room.AdditionalPrices.reduce((sum, item) => sum + item.amount, 0);
-    //     const otherCostTotal = room.OtherCosts.reduce((sum, item) => sum + item.amount, 0);
-    //     const totalPrice = basicPrice + additionalPriceTotal + otherCostTotal;
-
-    //     // Get the latest tenant if available
-    //     const latestTenant = room.Tenants.length > 0 ? room.Tenants[0] : null;
-
-    //     let response = {
-    //         ...room.get({ plain: true }),
-    //         totalPrice,
-    //         latestTenant,
-    //     }
-
-    //     const { Tenants, ...newResponse } = response
-
-    //     res.json(newResponse);
-    // } catch (error) {
-    //     logger.error(`❌ getRoomById error: ${error.message}`);
-    //     logger.error(error.stack);
-    //     res.status(500).json({ error: 'Internal Server Error' });
-    // }
 };
 
 exports.createRoom = async (req, res) => {
@@ -296,49 +257,126 @@ exports.createRoom = async (req, res) => {
 };
 
 exports.updateRoom = async (req, res) => {
+    // Start a transaction
+    const t = await sequelize.transaction();
     try {
-        const data = await Room.findByPk(req.params.id);
-        if (!data) return res.status(404).json({ error: 'room not found' });
+        const { id } = req.params; // Room ID from URL
+        const { additionalPrices, otherCosts, ...roomUpdateData } = req.body; // Extract related data and room update data
 
-        await data.update(req.body);
+        // Validate if ID is provided
+        if (!id) {
+            await t.rollback();
+            return res.status(400).json({
+                success: false,
+                message: 'Room ID is required',
+                data: null
+            });
+        }
 
-        // Find room with related AdditionalPrice, OtherCost, and latest Tenant
-        const room = await Room.findByPk(req.params.id, {
+        // 1. Find the room to update within the transaction
+        const room = await Room.findByPk(id, { transaction: t });
+
+        if (!room) {
+            await t.rollback();
+            return res.status(404).json({
+                success: false,
+                message: 'Room not found',
+                data: null
+            });
+        }
+
+        // Optional: Basic validation for incoming boardingHouseId or priceId if they are being updated
+        if (roomUpdateData.boardingHouseId) {
+            const boardingHouse = await BoardingHouse.findByPk(roomUpdateData.boardingHouseId, { transaction: t });
+            if (!boardingHouse) {
+                await t.rollback();
+                return res.status(404).json({ message: 'Provided Boarding House not found' });
+            }
+        }
+        if (roomUpdateData.priceId) {
+            const price = await Price.findOne({
+                where: {
+                    id: roomUpdateData.priceId,
+                    // Optional: Check if the price belongs to the CURRENT or NEW boarding house
+                    // depending on your business logic. Here we check against the provided boardingHouseId if present,
+                    // otherwise against the room's current boardingHouseId.
+                    boardingHouseId: roomUpdateData.boardingHouseId || room.boardingHouseId
+                },
+                transaction: t
+            });
+            if (!price) {
+                await t.rollback();
+                return res.status(404).json({ message: 'Provided Price not found or does not belong to the specified Boarding House' });
+            }
+        }
+
+
+        // Filter req.body to get only valid Room attributes for update
+        const validRoomUpdateFields = ['boardingHouseId', 'priceId', 'roomNumber', 'roomStatus', 'description', 'updateBy'];
+        const roomFieldsToUpdate = {};
+        validRoomUpdateFields.forEach(field => {
+            if (roomUpdateData[field] !== undefined) {
+                roomFieldsToUpdate[field] = roomUpdateData[field];
+            }
+        });
+
+
+        // 2. Update the Room record
+        await room.update(roomFieldsToUpdate, { transaction: t });
+
+        // 3. Create new AdditionalPrice records if provided
+        if (additionalPrices && Array.isArray(additionalPrices) && additionalPrices.length > 0) {
+            const additionalPriceData = additionalPrices.map(ap => ({
+                ...ap, // Copy properties from the request object
+                roomId: room.id, // Link to the updated room
+                // Ensure required fields for AdditionalPrice are present in 'ap' or default them
+                amount: ap.amount, // Assuming amount is mandatory and present
+                name: ap.name || 'Unnamed Additional Price', // Assuming name is mandatory or defaults
+                status: ap.status || 'active', // Default status if not provided
+                // createBy and updateBy should ideally come from the request context (e.g., authenticated user)
+                createBy:  req.user.username || 'System',
+                updateBy:  req.user.username || 'System',
+            }));
+            // Use bulkCreate for efficiency
+            await AdditionalPrice.bulkCreate(additionalPriceData, { transaction: t });
+        }
+
+        // 4. Create new OtherCost records if provided
+        if (otherCosts && Array.isArray(otherCosts) && otherCosts.length > 0) {
+            const otherCostData = otherCosts.map(oc => ({
+                ...oc, // Copy properties from the request object
+                roomId: room.id, // Link to the updated room
+                // Ensure required fields for OtherCost are present in 'oc' or default them
+                amount: oc.amount, // Assuming amount is mandatory and present
+                name: oc.name || 'Unnamed Other Cost', // Assuming name is mandatory or defaults
+                status: oc.status || 'active', // Default status if not provided
+                // createBy and updateBy should ideally come from the request context
+                createBy:  req.user.username || 'System',
+                updateBy:  req.user.username|| 'System',
+            }));
+            // Use bulkCreate for efficiency
+            await OtherCost.bulkCreate(otherCostData, { transaction: t });
+        }
+
+
+        // If all operations succeeded, commit the transaction
+        await t.commit();
+
+        // 5. Fetch the updated room with its primary associations for the response
+        const updatedRoom = await Room.findByPk(room.id, {
             include: [
-                {
-                    model: AdditionalPrice,
-                    as: 'AdditionalPrices',
-                },
-                {
-                    model: OtherCost,
-                    as: 'OtherCosts',
-                },
-                {
-                    model: Tenant,
-                    as: 'Tenants',
-                    order: [['createdAt', 'DESC']],
-                    limit: 1,
-                }
+                { model: BoardingHouse, attributes: ['id', 'name', 'address'] },
+                { model: Price, attributes: ['id', 'roomSize', 'amount', 'name', 'description'] }
+                // We don't include AdditionalPrice or OtherCost here to keep the response lean,
+                // but you can add them if needed. The user can call getRoomById to get everything.
             ]
         });
 
-        if (!room) {
-            return res.status(404).json({ error: 'Room not found' });
-        }
 
-        // Calculate total price
-        const basicPrice = room.basicPrice || 0;
-        const additionalPriceTotal = room.AdditionalPrices.reduce((sum, item) => sum + item.amount, 0);
-        const otherCostTotal = room.OtherCosts.reduce((sum, item) => sum + item.amount, 0);
-        const totalPrice = basicPrice + additionalPriceTotal + otherCostTotal;
-
-        // Get the latest tenant if available
-        const latestTenant = room.Tenants.length > 0 ? room.Tenants[0] : null;
-
-        res.json({
-            ...room.get({ plain: true }),
-            totalPrice,
-            latestTenant,
+        res.status(200).json({
+            success: true,
+            message: 'Room updated and related records created successfully',
+            data: updatedRoom
         });
 
     } catch (error) {

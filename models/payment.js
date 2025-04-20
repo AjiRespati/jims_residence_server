@@ -6,16 +6,15 @@ module.exports = (sequelize, DataTypes) => {
         transactionType: { type: DataTypes.ENUM('debit', 'credit'), allowNull: false },
         transactionImagePath: { type: DataTypes.STRING },
         description: { type: DataTypes.TEXT },
+        createBy: { type: DataTypes.STRING },
         updateBy: { type: DataTypes.STRING },
+        timelimit: { type: DataTypes.DATE },
         paymentDate: { type: DataTypes.DATE },
         paymentStatus: { type: DataTypes.ENUM('unpaid', 'paid') },
     }, { timestamps: true });
 
     Payment.associate = (models) => {
         Payment.belongsTo(models.Tenant, { foreignKey: "tenantId" });
-        Payment.hasMany(models.RoomPrice, { foreignKey: "paymentId", onDelete: "CASCADE" });
-        Payment.hasMany(models.AdditionalPrice, { foreignKey: "paymentId", onDelete: "CASCADE" });
-        Payment.hasMany(models.OtherCost, { foreignKey: "paymentId", onDelete: "CASCADE" });
     };
 
     return Payment;
