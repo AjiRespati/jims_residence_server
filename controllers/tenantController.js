@@ -2,7 +2,7 @@ const db = require("../models");
 const sequelize = db.sequelize;
 // const Sequelize = db.Sequelize;
 
-const { Tenant, Room, Price, Payment, BoardingHouse } = require('../models');
+const { Tenant, Room, Price, AdditionalPrice, OtherCost, Payment, BoardingHouse } = require('../models');
 const logger = require('../config/logger');
 
 exports.getAllTenants = async (req, res) => {
@@ -44,8 +44,7 @@ exports.createTenant = async (req, res) => {
             NIKImagePath, // Optional
             isNIKCopyDone, // Optional, defaults in model
             tenancyStatus, // Optional, defaults in model
-            createBy,
-            updateBy
+            roomStatus, // Optional, defaults in model
             // paymentDate and paymentStatus are now on the Payment model
         } = req.body;
 
@@ -57,22 +56,22 @@ exports.createTenant = async (req, res) => {
 
         // 1. Fetch the Room and its associated ACTIVE Price, AdditionalPrices, and OtherCosts within the transaction
         // We need more attributes now for the individual payment descriptions
-        const roomWithCosts = await db.Room.findByPk(roomId, {
+        const roomWithCosts = await Room.findByPk(roomId, {
             include: [
                 {
-                    model: db.Price,
+                    model: Price,
                     attributes: ['id', 'name', 'amount', 'roomSize', 'description'], // Get attributes for description
                     where: { status: 'active' },
                     required: true, // Require an active price
                 },
                 {
-                    model: db.AdditionalPrice,
+                    model: AdditionalPrice,
                     attributes: ['id', 'name', 'amount', 'description'], // Get attributes for description
                     where: { status: 'active' },
                     required: false,
                 },
                 {
-                    model: db.OtherCost,
+                    model: OtherCost,
                     attributes: ['id', 'name', 'amount', 'description'], // Get attributes for description
                     where: { status: 'active' },
                     required: false,
@@ -88,7 +87,7 @@ exports.createTenant = async (req, res) => {
         }
 
         // 2. Create the Tenant record
-        const newTenant = await db.Tenant.create({
+        const newTenant = await Tenant.create({
             roomId,
             name,
             phone,
@@ -157,27 +156,35 @@ exports.createTenant = async (req, res) => {
         }
 
         // Create all prepared payment records in bulk
-        await db.Payment.bulkCreate(paymentsToCreate, { transaction: t });
-        // const createdPayments = await db.Payment.bulkCreate(paymentsToCreate, { transaction: t });
+        await Payment.bulkCreate(paymentsToCreate, { transaction: t });
 
+        // 4. Update room status
+
+        await roomWithCosts.update(
+            {
+                updateBy: req.user.username,
+                roomStatus: roomStatus || 'Terisi'
+            },
+            { transaction: t }
+        );
 
         // If all operations were successful, commit the transaction
         await t.commit();
 
         // Fetch the newly created Tenant with its associated Payments for the response
         // We will include all the payments created in this transaction
-        const tenantWithDetails = await db.Tenant.findByPk(newTenant.id, {
+        const tenantWithDetails = await Tenant.findByPk(newTenant.id, {
             include: [
                 {
-                    model: db.Room,
+                    model: Room,
                     attributes: ['id', 'roomNumber', 'roomStatus'],
                     include: { // Include BoardingHouse within Room for context
-                        model: db.BoardingHouse,
+                        model: BoardingHouse,
                         attributes: ['id', 'name']
                     }
                 },
                 {
-                    model: db.Payment, // Include all associated Payments for this tenant
+                    model: Payment, // Include all associated Payments for this tenant
                     attributes: ['id', 'totalAmount', 'transactionType', 'timelimit', 'paymentDate', 'paymentStatus', 'description', 'createBy', 'updateBy']
                     // Optional: Filter payments created within a certain time frame if needed, but linking to new tenant ID is enough here
                     // where: { createdAt: { [db.Sequelize.Op.gte]: t.finished } } // Example to filter payments created since transaction start

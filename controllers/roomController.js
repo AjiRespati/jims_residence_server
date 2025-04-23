@@ -7,7 +7,7 @@ const logger = require('../config/logger');
 
 exports.getAllRooms = async (req, res) => {
     try {
-                const { kostId } = req.params;
+        const { kostId } = req.params;
         let whereClause = {}
         if (kostId) whereClause['id'] = kostId;
 
@@ -122,8 +122,8 @@ exports.getRoomById = async (req, res) => {
             });
         }
 
-        // 1. Find the room by primary key and include most specified associated models
-        // Include the latest active Tenant, but NOT their payments in this first query
+        // Find the room by primary key and include most specified associated models
+        // Include the latest active Tenant, but NOT their payments
         const room = await Room.findByPk(id, {
             include: [
                 {
@@ -146,7 +146,7 @@ exports.getRoomById = async (req, res) => {
                     ],
                     limit: 1, // Still limit to only the latest active tenant here
                     required: false, // Use false (LEFT JOIN) so rooms without active tenants are still included
-                    // *** DO NOT include Payments here ***
+                    // *** Payments include removed from here ***
                 },
                 {
                     model: AdditionalPrice, // Include ONLY Active AdditionalPrice records
@@ -178,31 +178,20 @@ exports.getRoomById = async (req, res) => {
         const roomData = room.toJSON();
 
         // Process the Tenants array to get the single latestTenant object
-        // This mirrors the logic in getAllRooms
+        // The nested Payments are NOT fetched here anymore
         let latestTenant = null;
         if (roomData.Tenants && roomData.Tenants.length > 0) {
             latestTenant = roomData.Tenants[0];
             delete roomData.Tenants; // Remove the original array
         } else {
-            delete roomData.Tenants; // Remove the original array if empty
+             delete roomData.Tenants; // Remove the original array if empty
         }
 
-        // 2. If a latest tenant was found, fetch ALL their payments in a separate query
-        if (latestTenant) {
-            const tenantPayments = await Payment.findAll({
-                where: { tenantId: latestTenant.id }, // Fetch payments for this specific tenant
-                attributes: ['id', 'totalAmount', 'transactionType', 'timelimit', 'paymentDate', 'paymentStatus', 'description', 'createBy', 'updateBy'], // Include relevant Payment attributes
-                order: [['createdAt', 'ASC']] // Example order for payments
-            });
-            // Attach the fetched payments array to the latestTenant object
-            latestTenant.Payments = tenantPayments;
-        }
-
-        // Attach the latestTenant object (now potentially with Payments) to the room data
+        // Attach the latestTenant object (without Payments) to the room data
         roomData.latestTenant = latestTenant;
 
 
-        // Calculate totalPrice based on fetched active costs
+        // Calculate totalPrice based on fetched active costs (Price, AdditionalPrices, OtherCosts)
         let totalPrice = 0;
 
         // 1. Add Price amount
@@ -231,7 +220,7 @@ exports.getRoomById = async (req, res) => {
 
         res.status(200).json({
             success: true,
-            message: 'Room retrieved successfully with specified details and calculated total price',
+            message: 'Room retrieved successfully with specified details and calculated total price (excluding tenant payments)',
             data: roomData
         });
 
