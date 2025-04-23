@@ -7,8 +7,84 @@ const logger = require('../config/logger');
 
 exports.getAllTenants = async (req, res) => {
     try {
-        const data = await Tenant.findAll();
-        res.json(data);
+        // Find all tenants and include specified associated data
+        // Data is fetched with includes, we will flatten it later
+        const tenants = await Tenant.findAll({
+            attributes: [
+                'id',
+                'name',
+                'phone',
+                'NIKNumber',
+                'tenancyStatus',
+                'startDate',
+                'dueDate',
+                'banishDate',
+                'createBy',
+                'updateBy',
+                'NIKImagePath',
+                'isNIKCopyDone'
+            ],
+            include: [
+                {
+                    model: Room, // Include the associated Room
+                    attributes: ['roomNumber'], // Select roomNumber to access it
+                    include: [
+                        {
+                            model: BoardingHouse, // Include BoardingHouse nested within Room
+                            attributes: ['name'] // Select name to access it
+                        }
+                    ],
+                    required: true // Ensure only tenants with associated rooms are returned
+                },
+                {
+                    model: Payment, // Include associated Payments
+                    attributes: [
+                        'id',
+                        'totalAmount',
+                        'transactionType',
+                        'timelimit',
+                        'paymentDate',
+                        'paymentStatus',
+                        'description',
+                        'createBy',
+                        'updateBy'
+                    ],
+                    where: {
+                        paymentStatus: 'unpaid' // Filter for unpaid payments only
+                    },
+                    required: false // Use LEFT JOIN so tenants without unpaid payments are also included
+                }
+            ]
+        });
+
+        // Flatten the response structure
+        const flattenedTenants = tenants.map(tenant => {
+            const tenantData = tenant.toJSON(); // Convert Sequelize instance to plain JSON object
+
+            // Extract roomNumber and boardingHouseName from nested objects
+            const roomNumber = tenantData.Room ? tenantData.Room.roomNumber : null;
+            const boardingHouseName = (tenantData.Room && tenantData.Room.BoardingHouse) ? tenantData.Room.BoardingHouse.name : null;
+
+            // Add roomNumber and boardingHouseName as top-level properties
+            tenantData.roomNumber = roomNumber;
+            tenantData.boardingHouseName = boardingHouseName;
+
+            // Remove the original nested Room object
+            delete tenantData.Room;
+
+            // The Payments array is already a direct property of the tenantData object,
+            // so it remains in place.
+
+            return tenantData;
+        });
+
+
+        res.status(200).json({
+            success: true,
+            message: 'Tenants retrieved successfully with unpaid payments, room number, and boarding house name',
+            data: flattenedTenants // Send the flattened data
+        });
+
     } catch (error) {
         logger.error(`❌ getAllTenants error: ${error.message}`);
         logger.error(error.stack);
@@ -18,9 +94,93 @@ exports.getAllTenants = async (req, res) => {
 
 exports.getTenantById = async (req, res) => {
     try {
-        const data = await Tenant.findByPk(req.params.id);
-        if (!data) return res.status(404).json({ error: 'tenant not found' });
-        res.json(data);
+        const { id } = req.params; // Extract the tenant ID from request parameters
+
+        // Validate if ID is provided
+        if (!id) {
+            return res.status(400).json({
+                success: false,
+                message: 'Tenant ID is required',
+                data: null
+            });
+        }
+
+        // Find the tenant by primary key and include associated data
+        const tenant = await Tenant.findByPk(id, {
+            attributes: [ // Select specific attributes for the Tenant
+                'id',
+                'name',
+                'phone',
+                'NIKNumber',
+                'NIKImagePath',
+                'isNIKCopyDone',
+                'tenancyStatus',
+                'startDate',
+                'dueDate',
+                'banishDate',
+                'createBy',
+                'updateBy'
+            ],
+            include: [
+                {
+                    model: Room, // Include the associated Room
+                    attributes: ['id', 'roomNumber', 'roomStatus', 'description'], // Select relevant Room attributes
+                    include: [
+                        {
+                            model: BoardingHouse, // Include the associated BoardingHouse nested within Room
+                            attributes: ['id', 'name', 'address'] // Select relevant BoardingHouse attributes
+                        }
+                    ],
+                    required: false // Use LEFT JOIN in case a tenant somehow has no room associated
+                },
+                {
+                    model: Payment, // Include ALL associated Payments for this tenant
+                    attributes: [ // Select relevant Payment attributes
+                        'id',
+                        'totalAmount',
+                        'transactionType',
+                        'timelimit',
+                        'paymentDate',
+                        'paymentStatus',
+                        'description',
+                        'createBy',
+                        'updateBy'
+                    ],
+                    required: false, // Use LEFT JOIN so tenants without payments are also included
+                    order: [['createdAt', 'DESC']] // Optional: Order payments, e.g., by most recent first
+                }
+            ]
+        });
+
+        // Check if the tenant was found
+        if (!tenant) {
+            return res.status(404).json({
+                success: false,
+                message: 'Tenant not found',
+                data: null
+            });
+        }
+
+        // Convert the Sequelize instance to a plain JSON object for the response
+        const tenantData = tenant.toJSON();
+
+        // Extract roomNumber and boardingHouseName from nested objects
+        const roomNumber = tenantData.Room ? tenantData.Room.roomNumber : null;
+        const boardingHouseName = (tenantData.Room && tenantData.Room.BoardingHouse) ? tenantData.Room.BoardingHouse.name : null;
+
+        // Add roomNumber and boardingHouseName as top-level properties
+        tenantData.roomNumber = roomNumber;
+        tenantData.boardingHouseName = boardingHouseName;
+
+        // Remove the original nested Room object
+        delete tenantData.Room;
+
+        res.status(200).json({
+            success: true,
+            message: 'Tenant retrieved successfully with associated details',
+            data: tenantData // Send the nested data
+        });
+
     } catch (error) {
         logger.error(`❌ getTenantById error: ${error.message}`);
         logger.error(error.stack);
@@ -215,15 +375,125 @@ exports.createTenant = async (req, res) => {
 
 exports.updateTenant = async (req, res) => {
     try {
-        const data = await Tenant.findByPk(req.params.id);
-        if (!data) return res.status(404).json({ error: 'tenant not found' });
+        const { id } = req.params; // Tenant ID from URL
 
-        await data.update(req.body);
-        res.json(data);
+        // Validate if ID is provided
+        if (!id) {
+            return res.status(400).json({
+                success: false,
+                message: 'Tenant ID is required',
+                data: null
+            });
+        }
+
+        // Find the tenant to update
+        const tenant = await Tenant.findByPk(id);
+
+        if (!tenant) {
+            // If a file was uploaded, we should clean it up since the tenant wasn't found
+            if (req.imagePath) {
+                const fullPath = path.join(__dirname, '..', req.imagePath);
+                fs.unlink(fullPath, (err) => {
+                    if (err) logger.error(`❌ Error deleting uploaded file for non-existent tenant: ${fullPath}`, err);
+                    else logger.info(`🗑️ Deleted uploaded file for non-existent tenant: ${fullPath}`);
+                });
+            }
+            return res.status(404).json({
+                success: false,
+                message: 'Tenant not found',
+                data: null
+            });
+        }
+
+        // Prepare update data from request body, including only allowed fields
+        const tenantUpdateData = {};
+        const allowedUpdateFields = [
+            'roomId',
+            'name',
+            'phone',
+            'NIKNumber',
+            'isNIKCopyDone',
+            'tenancyStatus',
+            'startDate',
+            'dueDate',
+            'banishDate',
+            'updateBy' // Assuming updateBy is sent in the body
+            // createBy should generally not be updated here
+        ];
+
+        allowedUpdateFields.forEach(field => {
+            if (req.body[field] !== undefined) { // Only include fields present in the body
+                tenantUpdateData[field] = req.body[field];
+            }
+        });
+
+        // Add the NIKImagePath if a file was uploaded by the middleware
+        if (req.imagePath) {
+            // Optional: Delete the old NIK image if a new one is uploaded
+            if (tenant.NIKImagePath) {
+                const oldImagePath = path.join(__dirname, '..', tenant.NIKImagePath);
+                // Check if the old file exists before attempting to delete
+                fs.access(oldImagePath, fs.constants.F_OK, (err) => {
+                    if (err) {
+                        logger.warn(`⚠️ Old NIK image file not found for deletion: ${oldImagePath}`);
+                    } else {
+                        fs.unlink(oldImagePath, (err) => {
+                            if (err) logger.error(`❌ Error deleting old NIK image file: ${oldImagePath}`, err);
+                            else logger.info(`🗑️ Deleted old NIK image file: ${oldImagePath}`);
+                        });
+                    }
+                });
+            }
+            tenantUpdateData.NIKImagePath = req.imagePath; // Set the new image path
+        }
+
+        // Update the tenant record with the prepared data
+        const updatedTenant = await tenant.update(tenantUpdateData);
+
+        // Fetch the updated tenant with its standard associations for the response
+        const tenantWithDetails = await Tenant.findByPk(updatedTenant.id, {
+            attributes: [ // Select specific attributes for the Tenant
+                'id', 'name', 'phone', 'NIKNumber', 'NIKImagePath', 'isNIKCopyDone',
+                'tenancyStatus', 'startDate', 'dueDate', 'banishDate', 'createBy', 'updateBy'
+            ],
+            include: [
+                {
+                    model: Room, // Include the associated Room
+                    attributes: ['id', 'roomNumber', 'roomSize', 'roomStatus'],
+                    include: [
+                        {
+                            model: BoardingHouse, // Include the associated BoardingHouse
+                            attributes: ['id', 'name', 'address']
+                        }
+                    ]
+                },
+                // We are not including Payments here, getTenantById handles that
+            ]
+        });
+
+
+        res.status(200).json({
+            success: true,
+            message: 'Tenant updated successfully',
+            data: tenantWithDetails // Return the updated tenant with relevant details
+        });
+
     } catch (error) {
         logger.error(`❌ updateTenant error: ${error.message}`);
         logger.error(error.stack);
-        res.status(400).json({ error: 'Bad Request' });
+        // Optional: If an error occurred *after* middleware uploaded a file, you might want to delete the file here too.
+        // This requires checking if req.imagePath exists in the catch block.
+        if (req.imagePath) {
+            const fullPath = path.join(__dirname, '..', req.imagePath);
+            // Added a timeout because unlink might fail immediately if the file system is busy after an error
+            setTimeout(() => {
+                fs.unlink(fullPath, (err) => {
+                    if (err) logger.error(`❌ Error deleting uploaded file after update error: ${fullPath}`, err);
+                    else logger.info(`🗑️ Deleted uploaded file after update error: ${fullPath}`);
+                });
+            }, 100); // Small delay
+        }
+        res.status(500).json({ message: 'Internal Server Error', error: error.message });
     }
 };
 
