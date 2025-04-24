@@ -4,6 +4,8 @@ const sequelize = db.sequelize;
 
 const { Tenant, Room, Price, AdditionalPrice, OtherCost, Payment, BoardingHouse } = require('../models');
 const logger = require('../config/logger');
+const path = require("path");
+const fs = require("fs");
 
 exports.getAllTenants = async (req, res) => {
     try {
@@ -373,12 +375,37 @@ exports.createTenant = async (req, res) => {
     }
 };
 
+// Helper function to delete a file safely
+const deleteFile = (filePath, logPrefix = 'File') => {
+    const fullPath = path.join(__dirname, '..', filePath);
+    // Check if the file path is valid and not just the root directory or similar safeguard
+    if (!filePath || filePath === '/' || filePath.startsWith('..')) {
+        logger.warn(`⚠️ Attempted to delete invalid file path: ${filePath}`);
+        return;
+    }
+
+    fs.access(fullPath, fs.constants.F_OK, (err) => {
+        if (err) {
+            logger.warn(`⚠️ ${logPrefix} file not found for deletion: ${fullPath}`);
+        } else {
+            fs.unlink(fullPath, (err) => {
+                if (err) logger.error(`❌ Error deleting ${logPrefix} file: ${fullPath}`, err);
+                else logger.info(`🗑️ Deleted ${logPrefix} file: ${fullPath}`);
+            });
+        }
+    });
+};
+
 exports.updateTenant = async (req, res) => {
+    // No transaction needed for this specific method as per previous decision,
+    // unless adding more complex related updates/creates later.
+    // const t = await sequelize.transaction();
+
     try {
         const { id } = req.params; // Tenant ID from URL
 
-        // Validate if ID is provided
         if (!id) {
+            // await t.rollback();
             return res.status(400).json({
                 success: false,
                 message: 'Tenant ID is required',
@@ -386,18 +413,15 @@ exports.updateTenant = async (req, res) => {
             });
         }
 
-        // Find the tenant to update
+        // 1. Find the tenant to update
         const tenant = await Tenant.findByPk(id);
 
         if (!tenant) {
-            // If a file was uploaded, we should clean it up since the tenant wasn't found
+            // If a file was uploaded for a non-existent tenant, clean it up
             if (req.imagePath) {
-                const fullPath = path.join(__dirname, '..', req.imagePath);
-                fs.unlink(fullPath, (err) => {
-                    if (err) logger.error(`❌ Error deleting uploaded file for non-existent tenant: ${fullPath}`, err);
-                    else logger.info(`🗑️ Deleted uploaded file for non-existent tenant: ${fullPath}`);
-                });
+                deleteFile(req.imagePath, 'Uploaded NIK image');
             }
+            // await t.rollback();
             return res.status(404).json({
                 success: false,
                 message: 'Tenant not found',
@@ -405,9 +429,9 @@ exports.updateTenant = async (req, res) => {
             });
         }
 
-        // Prepare update data from request body, including only allowed fields
+        // 2. Prepare update data from request body and image path
         const tenantUpdateData = {};
-        const allowedUpdateFields = [
+        const updatableFields = [
             'roomId',
             'name',
             'phone',
@@ -418,57 +442,86 @@ exports.updateTenant = async (req, res) => {
             'dueDate',
             'banishDate',
             'updateBy' // Assuming updateBy is sent in the body
-            // createBy should generally not be updated here
         ];
 
-        allowedUpdateFields.forEach(field => {
-            if (req.body[field] !== undefined) { // Only include fields present in the body
+        updatableFields.forEach(field => {
+            if (req.body[field] !== undefined) {
                 tenantUpdateData[field] = req.body[field];
             }
         });
 
         // Add the NIKImagePath if a file was uploaded by the middleware
         if (req.imagePath) {
-            // Optional: Delete the old NIK image if a new one is uploaded
+            // Before setting the new path, consider deleting the old image file
             if (tenant.NIKImagePath) {
-                const oldImagePath = path.join(__dirname, '..', tenant.NIKImagePath);
-                // Check if the old file exists before attempting to delete
-                fs.access(oldImagePath, fs.constants.F_OK, (err) => {
-                    if (err) {
-                        logger.warn(`⚠️ Old NIK image file not found for deletion: ${oldImagePath}`);
-                    } else {
-                        fs.unlink(oldImagePath, (err) => {
-                            if (err) logger.error(`❌ Error deleting old NIK image file: ${oldImagePath}`, err);
-                            else logger.info(`🗑️ Deleted old NIK image file: ${oldImagePath}`);
-                        });
-                    }
-                });
+                deleteFile(tenant.NIKImagePath, 'Old NIK image');
             }
             tenantUpdateData.NIKImagePath = req.imagePath; // Set the new image path
+            tenantUpdateData.isNIKCopyDone = true; // set copy done true
         }
 
-        // Update the tenant record with the prepared data
-        const updatedTenant = await tenant.update(tenantUpdateData);
+        // 3. Optional Validation for Foreign Keys if present in update data
+        if (tenantUpdateData.boardingHouseId) {
+            const boardingHouse = await BoardingHouse.findByPk(tenantUpdateData.boardingHouseId); // , { transaction: t }
+            if (!boardingHouse) {
+                // await t.rollback();
+                return res.status(404).json({ message: 'Provided Boarding House not found' });
+            }
+        }
+        if (tenantUpdateData.priceId) {
+            const price = await Price.findOne({
+                where: {
+                    id: tenantUpdateData.priceId,
+                    // Check against the provided boardingHouseId if present, otherwise against the tenant's current one
+                    boardingHouseId: tenantUpdateData.boardingHouseId || tenant.boardingHouseId
+                }
+                // , { transaction: t }
+            });
+            if (!price) {
+                // await t.rollback();
+                return res.status(404).json({ message: 'Provided Price not found or does not belong to the specified Boarding House' });
+            }
+        }
 
-        // Fetch the updated tenant with its standard associations for the response
+
+        // 4. Update the tenant record (only if there are fields to update or an image path)
+        if (Object.keys(tenantUpdateData).length === 0) {
+            // If no fields were sent for update and no image was uploaded
+            // You might return a 304 Not Modified or just the current tenant data
+            return res.status(200).json({
+                success: true,
+                message: 'No updates provided.',
+                data: tenant.toJSON() // Return current data
+            });
+        }
+
+        const updatedTenant = await tenant.update(tenantUpdateData); // , { transaction: t }
+
+        // await t.commit(); // Commit transaction if used
+
+
+        // 5. Fetch the updated tenant with its standard associations for the response
+        const tenantDetailsInclude = [
+            {
+                model: Room, // Include the associated Room
+                attributes: ['id', 'roomNumber', 'description', 'roomStatus'],
+                include: [
+                    {
+                        model: BoardingHouse, // Include the associated BoardingHouse
+                        attributes: ['id', 'name', 'address']
+                    }
+                ],
+                required: false // Keep as false
+            },
+            // We are not including Payments here, getTenantById handles that
+        ];
+
         const tenantWithDetails = await Tenant.findByPk(updatedTenant.id, {
             attributes: [ // Select specific attributes for the Tenant
                 'id', 'name', 'phone', 'NIKNumber', 'NIKImagePath', 'isNIKCopyDone',
                 'tenancyStatus', 'startDate', 'dueDate', 'banishDate', 'createBy', 'updateBy'
             ],
-            include: [
-                {
-                    model: Room, // Include the associated Room
-                    attributes: ['id', 'roomNumber', 'roomSize', 'roomStatus'],
-                    include: [
-                        {
-                            model: BoardingHouse, // Include the associated BoardingHouse
-                            attributes: ['id', 'name', 'address']
-                        }
-                    ]
-                },
-                // We are not including Payments here, getTenantById handles that
-            ]
+            include: tenantDetailsInclude
         });
 
 
@@ -484,15 +537,12 @@ exports.updateTenant = async (req, res) => {
         // Optional: If an error occurred *after* middleware uploaded a file, you might want to delete the file here too.
         // This requires checking if req.imagePath exists in the catch block.
         if (req.imagePath) {
-            const fullPath = path.join(__dirname, '..', req.imagePath);
             // Added a timeout because unlink might fail immediately if the file system is busy after an error
             setTimeout(() => {
-                fs.unlink(fullPath, (err) => {
-                    if (err) logger.error(`❌ Error deleting uploaded file after update error: ${fullPath}`, err);
-                    else logger.info(`🗑️ Deleted uploaded file after update error: ${fullPath}`);
-                });
+                deleteFile(req.imagePath, 'Uploaded NIK image');
             }, 100); // Small delay
         }
+        // await t.rollback(); // Rollback transaction if used
         res.status(500).json({ message: 'Internal Server Error', error: error.message });
     }
 };

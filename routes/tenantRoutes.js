@@ -14,7 +14,7 @@ const {
 router.get('/', authMiddleware, getAllTenants);
 router.get('/:id', authMiddleware, getTenantById);
 router.post('/', authMiddleware, createTenant);
-router.put("/", authMiddleware, upload.single("image"), imageCompressor, updateTenant );
+router.put("/:id", authMiddleware, upload.single("image"), imageCompressor, updateTenant );
 router.delete('/:id', authMiddleware, deleteTenant);
 
 module.exports = router;
