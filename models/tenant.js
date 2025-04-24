@@ -11,6 +11,7 @@ module.exports = (sequelize, DataTypes) => {
         startDate: { type: DataTypes.DATE },
         dueDate: { type: DataTypes.DATE },
         banishDate: { type: DataTypes.DATE },
+        endDate: { type: DataTypes.DATE },
         createBy: { type: DataTypes.STRING },
         updateBy: { type: DataTypes.STRING }
     }, { timestamps: true });

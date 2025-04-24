@@ -19,6 +19,7 @@ exports.getAllTenants = async (req, res) => {
                 'NIKNumber',
                 'tenancyStatus',
                 'startDate',
+                'endDate',
                 'dueDate',
                 'banishDate',
                 'createBy',
@@ -118,6 +119,7 @@ exports.getTenantById = async (req, res) => {
                 'isNIKCopyDone',
                 'tenancyStatus',
                 'startDate',
+                'endDate',
                 'dueDate',
                 'banishDate',
                 'createBy',
@@ -203,6 +205,7 @@ exports.createTenant = async (req, res) => {
             startDate,
             dueDate,
             banishDate, // Optional
+            endDate,
             NIKImagePath, // Optional
             isNIKCopyDone, // Optional, defaults in model
             tenancyStatus, // Optional, defaults in model
@@ -257,6 +260,7 @@ exports.createTenant = async (req, res) => {
             startDate,
             dueDate,
             banishDate,
+            endDate,
             NIKImagePath,
             isNIKCopyDone,
             tenancyStatus: tenancyStatus || 'Active',
@@ -439,6 +443,7 @@ exports.updateTenant = async (req, res) => {
             'isNIKCopyDone',
             'tenancyStatus',
             'startDate',
+            'endDate',
             'dueDate',
             'banishDate',
             'updateBy' // Assuming updateBy is sent in the body
