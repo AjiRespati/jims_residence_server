@@ -19,8 +19,8 @@ module.exports = (sequelize, DataTypes) => {
     Invoice.associate = (models) => {
         Invoice.belongsTo(models.Tenant, { foreignKey: "tenantId" });
         Invoice.belongsTo(models.Room, { foreignKey: "roomId" });
-        Invoice.hasMany(models.Charge, { foreignKey: "invoiceId", as: 'Charges', onDelete: 'CASCADE' }); // Invoice has many Charges
-        // You would likely add a hasMany(models.Transaction) association here to record payments received against this invoice
+        Invoice.hasMany(models.Charge, { foreignKey: "invoiceId", as: 'Charges', onDelete: 'CASCADE' });
+        Invoice.hasMany(models.Transaction, { foreignKey: "invoiceId", as: 'Transactions', onDelete: 'SET NULL' });
     };
 
     return Invoice;

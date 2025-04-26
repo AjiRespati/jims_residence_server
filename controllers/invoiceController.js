@@ -21,8 +21,6 @@ exports.createInvoice = async (req, res) => {
             issueDate,
             dueDate,
             description, // Optional description for the invoice header
-            createBy,
-            updateBy,
             charges // Array of charge line item data
         } = req.body;
 
@@ -61,8 +59,8 @@ exports.createInvoice = async (req, res) => {
             totalAmountPaid: 0, // Initially no amount paid
             status: 'Issued', // Default status for a newly created invoice
             description: description, // Optional description for the header
-            createBy: createBy,
-            updateBy: updateBy || createBy,
+            createBy: req.user.username,
+            updateBy: req.user.username,
         }, { transaction: t }); // Include the transaction
 
 
@@ -83,8 +81,8 @@ exports.createInvoice = async (req, res) => {
                 amount: chargeData.amount,
                 description: chargeData.description || null,
                 transactionType: chargeData.transactionType || 'debit', // Default to debit if not provided
-                createBy: chargeData.createBy || createBy, // Use charge-specific creator or invoice creator
-                updateBy: chargeData.updateBy || updateBy || createBy,
+                createBy: req.user.username, // Use charge-specific creator or invoice creator
+                updateBy: req.user.username,
             };
             chargesToCreate.push(charge);
             calculatedTotalAmountDue += charge.amount;
