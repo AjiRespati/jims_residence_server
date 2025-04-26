@@ -45,7 +45,8 @@ exports.getAllRooms = async (req, res) => {
                     where: { status: 'active' },
                     required: false // Use LEFT JOIN
                 }
-            ]
+            ],
+            order: [['roomNumber', 'ASC']],
         });
 
         const formattedRooms = rooms.map(room => {

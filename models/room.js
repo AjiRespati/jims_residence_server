@@ -13,6 +13,7 @@ module.exports = (sequelize, DataTypes) => {
     Room.associate = (models) => {
         Room.hasMany(models.RoomHistory, { foreignKey: "roomId", onDelete: "CASCADE" });
         Room.hasMany(models.Tenant, { foreignKey: "roomId", onDelete: "CASCADE" });
+        Room.hasMany(models.Invoice, { foreignKey: "roomId", onDelete: "CASCADE" });
         Room.hasMany(models.AdditionalPrice, { foreignKey: 'roomId' });
         Room.hasMany(models.OtherCost, { foreignKey: 'roomId' });
         Room.belongsTo(models.BoardingHouse, { foreignKey: 'boardingHouseId' });
