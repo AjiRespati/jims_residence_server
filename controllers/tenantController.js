@@ -2,7 +2,9 @@ const db = require("../models");
 const sequelize = db.sequelize;
 // const Sequelize = db.Sequelize;
 
-const { Tenant, Room, Price, AdditionalPrice, OtherCost, Payment, BoardingHouse } = require('../models');
+const { Tenant, Room, Price, AdditionalPrice, OtherCost,
+    Invoice, Charge, BoardingHouse
+} = require('../models');
 const logger = require('../config/logger');
 const path = require("path");
 const fs = require("fs");
@@ -10,7 +12,6 @@ const fs = require("fs");
 exports.getAllTenants = async (req, res) => {
     try {
         // Find all tenants and include specified associated data
-        // Data is fetched with includes, we will flatten it later
         const tenants = await Tenant.findAll({
             attributes: [
                 'id',
@@ -19,7 +20,6 @@ exports.getAllTenants = async (req, res) => {
                 'NIKNumber',
                 'tenancyStatus',
                 'startDate',
-                'endDate',
                 'dueDate',
                 'banishDate',
                 'createBy',
@@ -30,32 +30,48 @@ exports.getAllTenants = async (req, res) => {
             include: [
                 {
                     model: Room, // Include the associated Room
-                    attributes: ['roomNumber'], // Select roomNumber to access it
+                    attributes: ['roomNumber'], // Select only roomNumber
                     include: [
                         {
-                            model: BoardingHouse, // Include BoardingHouse nested within Room
-                            attributes: ['name'] // Select name to access it
+                            model: BoardingHouse, // Include the associated BoardingHouse nested within Room
+                            attributes: ['name'] // Select only the name
                         }
                     ],
                     required: true // Ensure only tenants with associated rooms are returned
                 },
                 {
-                    model: Payment, // Include associated Payments
-                    attributes: [
+                    model: Invoice, // Include associated Invoices
+                    attributes: [ // Select relevant Invoice attributes
                         'id',
-                        'totalAmount',
-                        'transactionType',
-                        'timelimit',
-                        'paymentDate',
-                        'paymentStatus',
-                        'description',
-                        'createBy',
-                        'updateBy'
+                        'periodStart',
+                        'periodEnd',
+                        'issueDate',
+                        'dueDate',
+                        'totalAmountDue',
+                        'totalAmountPaid',
+                        'status',
+                        'description'
                     ],
                     where: {
-                        paymentStatus: 'unpaid' // Filter for unpaid payments only
+                        // Filter for outstanding invoices
+                        status: ['Issued', 'Unpaid', 'PartiallyPaid']
                     },
-                    required: false // Use LEFT JOIN so tenants without unpaid payments are also included
+                    required: false, // Use LEFT JOIN so tenants without outstanding invoices are also included
+                    order: [['dueDate', 'ASC']], // Optional: Order invoices by due date
+                    include: [
+                        {
+                            model: Charge, // Include the Charges within the outstanding Invoice
+                            as: 'Charges', // Use the alias defined in the Invoice model association
+                            attributes: [ // Select relevant Charge attributes
+                                'id',
+                                'name',
+                                'amount',
+                                'description',
+                                'transactionType'
+                            ],
+                            required: false // Use LEFT JOIN so invoices without charges (unlikely) are included
+                        }
+                    ]
                 }
             ]
         });
@@ -75,8 +91,7 @@ exports.getAllTenants = async (req, res) => {
             // Remove the original nested Room object
             delete tenantData.Room;
 
-            // The Payments array is already a direct property of the tenantData object,
-            // so it remains in place.
+            // The Invoices array (containing outstanding invoices, each with Charges) remains as a nested array.
 
             return tenantData;
         });
@@ -84,7 +99,7 @@ exports.getAllTenants = async (req, res) => {
 
         res.status(200).json({
             success: true,
-            message: 'Tenants retrieved successfully with unpaid payments, room number, and boarding house name',
+            message: 'Tenants retrieved successfully with outstanding invoices, room number, and boarding house name',
             data: flattenedTenants // Send the flattened data
         });
 
@@ -119,8 +134,7 @@ exports.getTenantById = async (req, res) => {
                 'isNIKCopyDone',
                 'tenancyStatus',
                 'startDate',
-                'endDate',
-                'dueDate',
+                'dueDate', // This might now be the tenant's contract end date, distinct from invoice due dates
                 'banishDate',
                 'createBy',
                 'updateBy'
@@ -128,30 +142,48 @@ exports.getTenantById = async (req, res) => {
             include: [
                 {
                     model: Room, // Include the associated Room
-                    attributes: ['id', 'roomNumber', 'roomStatus', 'description'], // Select relevant Room attributes
+                    attributes: ['id', 'roomNumber', 'roomSize', 'roomStatus'], // Select relevant Room attributes
                     include: [
                         {
                             model: BoardingHouse, // Include the associated BoardingHouse nested within Room
                             attributes: ['id', 'name', 'address'] // Select relevant BoardingHouse attributes
                         }
                     ],
-                    required: false // Use LEFT JOIN in case a tenant somehow has no room associated
+                    required: false // Use LEFT JOIN
                 },
                 {
-                    model: Payment, // Include ALL associated Payments for this tenant
-                    attributes: [ // Select relevant Payment attributes
+                    model: Invoice, // Include ALL associated Invoices for this tenant
+                    attributes: [ // Select relevant Invoice attributes
                         'id',
-                        'totalAmount',
-                        'transactionType',
-                        'timelimit',
-                        'paymentDate',
-                        'paymentStatus',
+                        'periodStart',
+                        'periodEnd',
+                        'issueDate',
+                        'dueDate', // This is the Invoice's due date
+                        'totalAmountDue',
+                        'totalAmountPaid',
+                        'status',
                         'description',
                         'createBy',
                         'updateBy'
                     ],
-                    required: false, // Use LEFT JOIN so tenants without payments are also included
-                    order: [['createdAt', 'DESC']] // Optional: Order payments, e.g., by most recent first
+                    required: false, // Use LEFT JOIN so tenants without invoices are also included
+                    order: [['issueDate', 'DESC']], // Optional: Order invoices, e.g., by most recent first
+                    include: [
+                        {
+                            model: Charge, // Include the Charges within EACH Invoice
+                            as: 'Charges', // Use the alias defined in the Invoice model association
+                            attributes: [ // Select relevant Charge attributes
+                                'id',
+                                'name',
+                                'amount',
+                                'description',
+                                'transactionType', // 'debit' or 'credit' for the line item
+                                'createBy',
+                                'updateBy'
+                            ],
+                            required: false // Use LEFT JOIN so invoices without charges (unlikely) are included
+                        }
+                    ]
                 }
             ]
         });
@@ -181,7 +213,7 @@ exports.getTenantById = async (req, res) => {
 
         res.status(200).json({
             success: true,
-            message: 'Tenant retrieved successfully with associated details',
+            message: 'Tenant retrieved successfully with all invoices and charges',
             data: tenantData // Send the nested data
         });
 
@@ -202,44 +234,52 @@ exports.createTenant = async (req, res) => {
             name,
             phone,
             NIKNumber,
-            startDate,
-            dueDate,
+            startDate, // Start of tenancy / First billing period start
+            dueDate, // Due date for the first invoice
             banishDate, // Optional
             endDate,
             NIKImagePath, // Optional
             isNIKCopyDone, // Optional, defaults in model
             tenancyStatus, // Optional, defaults in model
             roomStatus, // Optional, defaults in model
-            // paymentDate and paymentStatus are now on the Payment model
         } = req.body;
 
         // Basic validation for mandatory tenant fields
-        if (!roomId || !name || !phone || !NIKNumber) {
+        if (!roomId || !name || !phone || !NIKNumber || !startDate || !dueDate) {
             await t.rollback(); // Rollback transaction before sending error
-            return res.status(400).json({ message: 'Required tenant fields are missing: roomId, name, phone, NIKNumber' });
+            return res.status(400).json({ message: 'Required tenant fields are missing: roomId, name, phone, NIKNumber, startDate, dueDate' });
         }
 
+        // Ensure startDate and dueDate are valid dates
+        const tenantStartDate = new Date(startDate);
+        const invoiceDueDate = new Date(dueDate);
+
+        if (isNaN(tenantStartDate.getTime()) || isNaN(invoiceDueDate.getTime())) {
+            await t.rollback();
+            return res.status(400).json({ message: 'Invalid startDate or dueDate format' });
+        }
+
+
         // 1. Fetch the Room and its associated ACTIVE Price, AdditionalPrices, and OtherCosts within the transaction
-        // We need more attributes now for the individual payment descriptions
         const roomWithCosts = await Room.findByPk(roomId, {
             include: [
                 {
                     model: Price,
-                    attributes: ['id', 'name', 'amount', 'roomSize', 'description'], // Get attributes for description
+                    attributes: ['id', 'name', 'amount', 'roomSize', 'description'], // Get attributes for Charge
                     where: { status: 'active' },
                     required: true, // Require an active price
                 },
                 {
                     model: AdditionalPrice,
-                    attributes: ['id', 'name', 'amount', 'description'], // Get attributes for description
+                    attributes: ['id', 'name', 'amount', 'description'], // Get attributes for Charge
                     where: { status: 'active' },
-                    required: false,
+                    required: false, // Don't require additional prices
                 },
                 {
                     model: OtherCost,
-                    attributes: ['id', 'name', 'amount', 'description'], // Get attributes for description
+                    attributes: ['id', 'name', 'amount', 'description'], // Get attributes for Charge
                     where: { status: 'active' },
-                    required: false,
+                    required: false, // Don't require other costs
                 }
             ],
             transaction: t // Include the transaction
@@ -257,8 +297,8 @@ exports.createTenant = async (req, res) => {
             name,
             phone,
             NIKNumber,
-            startDate,
-            dueDate,
+            startDate: tenantStartDate, // Use validated date
+            dueDate: invoiceDueDate, // Tenant's contract due date / First invoice due date
             banishDate,
             endDate,
             NIKImagePath,
@@ -268,63 +308,90 @@ exports.createTenant = async (req, res) => {
             updateBy: req.user.username,
         }, { transaction: t }); // Include the transaction
 
-        // 3. Prepare and create individual Payment records for each active cost component
+        // 3. Create the initial Invoice record for the new tenant
+        // Calculate billing period dates (e.g., one month from start date)
+        const invoicePeriodEnd = new Date(tenantStartDate);
+        invoicePeriodEnd.setMonth(invoicePeriodEnd.getMonth() + 1);
+        invoicePeriodEnd.setDate(invoicePeriodEnd.getDate() - 1); // End date is the day before the next month starts
 
-        const paymentsToCreate = [];
+        const firstInvoice = await Invoice.create({
+            tenantId: newTenant.id,
+            roomId: roomWithCosts.id, // Link to the room
+            periodStart: tenantStartDate, // Billing starts on tenancy start date
+            periodEnd: invoicePeriodEnd, // Billing ends one month later
+            issueDate: new Date(), // Invoice issued today
+            dueDate: invoiceDueDate, // Use tenant's provided dueDate for the first bill
+            totalAmountDue: 0, // Will calculate and update later
+            totalAmountPaid: 0, // Initially no amount paid
+            status: 'Issued', // Or 'Unpaid' depending on your flow
+            description: `Initial invoice for room ${roomWithCosts.roomNumber || roomId} period: ${tenantStartDate.toISOString().split('T')[0]} to ${invoicePeriodEnd.toISOString().split('T')[0]}`, // Example description
+            createBy: req.user.username,
+            updateBy: req.user.username,
+        }, { transaction: t }); // Include the transaction
 
-        // Payment for the main Room Price
+
+        // 4. Prepare and create Charge records for each active cost component, linking to the Invoice
+        const chargesToCreate = [];
+        let calculatedTotalAmountDue = 0;
+
+        // Charge for the main Room Price
         if (roomWithCosts.Price) {
-            paymentsToCreate.push({
-                tenantId: newTenant.id,
-                totalAmount: roomWithCosts.Price.amount, // Amount of this specific cost
+            const priceCharge = {
+                invoiceId: firstInvoice.id, // Link to the new Invoice
+                name: roomWithCosts.Price.name || 'Room Price',
+                amount: roomWithCosts.Price.amount,
                 transactionType: 'debit',
-                description: `${roomWithCosts.Price.name || 'Room Price'} (${roomWithCosts.Price.roomSize})`, // Detailed description
+                description: roomWithCosts.Price.description || `Base rent for ${roomWithCosts.Price.roomSize} room`,
+
                 createBy: req.user.username,
                 updateBy: req.user.username,
-                timelimit: dueDate, // Due date for this payment
-                paymentDate: null,
-                paymentStatus: 'unpaid',
-            });
+                // Optional: costOriginType: 'price', costOriginId: roomWithCosts.Price.id
+            };
+            chargesToCreate.push(priceCharge);
+            calculatedTotalAmountDue += priceCharge.amount;
         }
 
-        // Payments for Additional Prices
+        // Charges for Additional Prices
         if (roomWithCosts.AdditionalPrices && roomWithCosts.AdditionalPrices.length > 0) {
             roomWithCosts.AdditionalPrices.forEach(ap => {
-                paymentsToCreate.push({
-                    tenantId: newTenant.id,
-                    totalAmount: ap.amount, // Amount of this specific cost
+                const additionalCharge = {
+                    invoiceId: firstInvoice.id, // Link to the new Invoice
+                    name: ap.name || 'Additional Cost',
+                    amount: ap.amount,
+                    description: ap.description || 'Additional charge details',
                     transactionType: 'debit',
-                    description: `${ap.name || 'Additional Cost'}: ${ap.description || ''}`, // Detailed description
                     createBy: req.user.username,
                     updateBy: req.user.username,
-                    timelimit: dueDate, // Due date for this payment (can be adjusted per cost type if needed)
-                    paymentDate: null,
-                    paymentStatus: 'unpaid',
-                });
+                    // Optional: costOriginType: 'additionalPrice', costOriginId: ap.id
+                };
+                chargesToCreate.push(additionalCharge);
+                calculatedTotalAmountDue += additionalCharge.amount;
             });
         }
 
-        // Payments for Other Costs
+        // Charges for Other Costs
         if (roomWithCosts.OtherCosts && roomWithCosts.OtherCosts.length > 0) {
             roomWithCosts.OtherCosts.forEach(oc => {
-                paymentsToCreate.push({
-                    tenantId: newTenant.id,
-                    totalAmount: oc.amount, // Amount of this specific cost
+                const otherCharge = {
+                    invoiceId: firstInvoice.id, // Link to the new Invoice
+                    name: oc.name || 'Other Cost',
+                    amount: oc.amount,
+                    description: oc.description || 'Other cost details',
                     transactionType: 'debit',
-                    description: `${oc.name || 'Other Cost'}: ${oc.description || ''}`, // Detailed description
                     createBy: req.user.username,
                     updateBy: req.user.username,
-                    timelimit: dueDate, // Due date for this payment (can be adjusted per cost type if needed)
-                    paymentDate: null,
-                    paymentStatus: 'unpaid',
-                });
+                    // Optional: costOriginType: 'otherCost', costOriginId: oc.id
+                };
+                chargesToCreate.push(otherCharge);
+                calculatedTotalAmountDue += otherCharge.amount;
             });
         }
 
-        // Create all prepared payment records in bulk
-        await Payment.bulkCreate(paymentsToCreate, { transaction: t });
+        // Create all prepared Charge records in bulk
+        const createdCharges = await Charge.bulkCreate(chargesToCreate, { transaction: t });
 
-        // 4. Update room status
+        // 5. Update the totalAmountDue on the Invoice record
+        await firstInvoice.update({ totalAmountDue: calculatedTotalAmountDue }, { transaction: t });
 
         await roomWithCosts.update(
             {
@@ -337,28 +404,35 @@ exports.createTenant = async (req, res) => {
         // If all operations were successful, commit the transaction
         await t.commit();
 
-        // Fetch the newly created Tenant with its associated Payments for the response
-        // We will include all the payments created in this transaction
+        // 6. Fetch the newly created Tenant with their first Invoice (including Charges) for the response
         const tenantWithDetails = await Tenant.findByPk(newTenant.id, {
             include: [
                 {
                     model: Room,
-                    attributes: ['id', 'roomNumber', 'roomStatus'],
-                    include: { // Include BoardingHouse within Room for context
+                    attributes: ['id', 'roomNumber', 'roomSize', 'roomStatus'],
+                    include: {
                         model: BoardingHouse,
                         attributes: ['id', 'name']
                     }
                 },
                 {
-                    model: Payment, // Include all associated Payments for this tenant
-                    attributes: ['id', 'totalAmount', 'transactionType', 'timelimit', 'paymentDate', 'paymentStatus', 'description', 'createBy', 'updateBy']
-                    // Optional: Filter payments created within a certain time frame if needed, but linking to new tenant ID is enough here
-                    // where: { createdAt: { [db.Sequelize.Op.gte]: t.finished } } // Example to filter payments created since transaction start
+                    model: Invoice, // Include the associated Invoices
+                    // Filter to include only the first invoice created in this transaction if needed,
+                    // but since it's the first and only one, including all invoices for the new tenant is fine.
+                    attributes: ['id', 'periodStart', 'periodEnd', 'issueDate', 'dueDate', 'totalAmountDue', 'totalAmountPaid', 'status', 'description', 'createBy'],
+                    include: [
+                        {
+                            model: Charge, // Include the Charges within the Invoice
+                            as: 'Charges', // Use the alias defined in the Invoice model association
+                            attributes: ['id', 'name', 'amount', 'description', 'transactionType', 'createBy'],
+                        }
+                    ]
                 }
             ]
         });
 
-        res.status(200).json(tenantWithDetails); // Return the created tenant with details
+
+        res.status(200).json(tenantWithDetails); // Return the created tenant with details and their first invoice
 
     } catch (error) {
         logger.error(`❌ createTenant error: ${error.message}`);
@@ -499,6 +573,8 @@ exports.updateTenant = async (req, res) => {
                 data: tenant.toJSON() // Return current data
             });
         }
+
+        tenantUpdateData.updateBy =  req.user.username;
 
         const updatedTenant = await tenant.update(tenantUpdateData); // , { transaction: t }
 

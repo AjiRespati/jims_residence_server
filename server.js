@@ -25,6 +25,7 @@ const roomPriceRoutes = require("./routes/roomPriceRoutes");
 const roomRoutes = require("./routes/roomRoutes");
 const priceRoutes = require("./routes/priceRoutes");
 const tenantRoutes = require("./routes/tenantRoutes");
+const invoiceRoutes = require("./routes/invoiceRoutes");
 const transactionRoutes = require("./routes/transactionRoutes");
 const userRoutes = require("./routes/userRoutes");
 
@@ -48,6 +49,7 @@ app.use(`${base}/api/roomPrice`, roomPriceRoutes);
 app.use(`${base}/api/room`, roomRoutes);
 app.use(`${base}/api/price`, priceRoutes);
 app.use(`${base}/api/tenant`, tenantRoutes);
+app.use(`${base}/api/invoice`, invoiceRoutes);
 app.use(`${base}/api/transaction`, transactionRoutes);
 app.use(`${base}/api/user`, userRoutes);
 

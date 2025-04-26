@@ -269,7 +269,7 @@ exports.createRoom = async (req, res) => {
             boardingHouseId,
             priceId, // Use the provided priceId
             roomNumber,
-            // roomSize, // Still includes roomSize based on your model
+            roomSize : price.roomSize, // Still includes roomSize based on your model
             roomStatus,
             description,
             createBy: req.user.username

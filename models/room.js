@@ -5,6 +5,7 @@ module.exports = (sequelize, DataTypes) => {
         priceId: { type: DataTypes.UUID, allowNull: false },
         roomNumber: { type: DataTypes.STRING, allowNull: false },
         roomStatus: { type: DataTypes.ENUM('Tersedia', 'Terisi', 'Dipesan', 'Pemeliharaan', 'Rusak'), allowNull: false },
+        roomSize: { type: DataTypes.ENUM('Small', 'Standard', 'Big'), allowNull: false },
         description: { type: DataTypes.TEXT },
         createBy: { type: DataTypes.STRING },
         updateBy: { type: DataTypes.STRING }
