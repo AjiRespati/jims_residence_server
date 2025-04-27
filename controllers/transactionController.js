@@ -2,7 +2,7 @@ const db = require("../models");
 const sequelize = db.sequelize;
 // const Sequelize = db.Sequelize;
 
-const { Tenant, Transaction, Invoice, Room } = require('../models');
+const { Tenant, Transaction, Invoice, Charge, Room, BoardingHouse } = require('../models');
 const logger = require('../config/logger');
 const path = require("path");
 const fs = require("fs");
@@ -151,7 +151,11 @@ exports.getAllTransactions = async (req, res) => {
                     attributes: ['id', 'dueDate', 'totalAmountDue', 'totalAmountPaid', 'status'],
                     include: [ // Include Tenant and Room from Invoice
                         { model: Tenant, attributes: ['id', 'name'] },
-                        { model: Room, attributes: ['id', 'roomNumber'] }
+                        {
+                            model: Room,
+                            attributes: ['id', 'roomNumber'],
+                            include: [{ model: BoardingHouse, attributes: ['id', 'name'] }]
+                        }
                     ]
                 }
             ],
@@ -190,9 +194,30 @@ exports.getTransactionById = async (req, res) => {
                 {
                     model: Invoice, // Include the associated Invoice
                     attributes: ['id', 'periodStart', 'periodEnd', 'issueDate', 'dueDate', 'totalAmountDue', 'totalAmountPaid', 'status', 'description'],
-                    include: [ // Include Tenant and Room from Invoice
-                        { model: Tenant, attributes: ['id', 'name', 'phone'] },
-                        { model: Room, attributes: ['id', 'roomNumber', 'roomSize'] }
+                    include: [
+                        { // Include Tenant from Invoice
+                            model: Tenant,
+                            attributes: ['id', 'name', 'phone'],
+                            required: false // Use LEFT JOIN
+                        },
+                        { // Include Room from Invoice
+                            model: Room,
+                            attributes: ['id', 'roomNumber', 'roomSize'],
+                            required: false, // Use LEFT JOIN
+                            include: [
+                                {
+                                    model: BoardingHouse,
+                                    attributes: ['id', 'name'],
+                                    required: false, // Use LEFT JOIN
+                                }
+                            ]
+                        },
+                        { // 🔥 Include Charges from Invoice
+                            model: Charge,
+                            as: 'Charges', // Use the alias defined in the Invoice model association
+                            attributes: ['id', 'name', 'amount', 'description', 'transactionType', 'createBy', 'updateBy'], // Select relevant Charge attributes
+                            required: false // Use LEFT JOIN so invoices without charges are still included
+                        }
                     ]
                 }
             ]
@@ -208,7 +233,7 @@ exports.getTransactionById = async (req, res) => {
 
         res.status(200).json({
             success: true,
-            message: 'Transaction retrieved successfully with associated invoice details',
+            message: 'Transaction retrieved successfully with associated invoice and charges details',
             data: transaction
         });
 
