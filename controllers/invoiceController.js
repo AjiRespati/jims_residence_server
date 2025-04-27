@@ -159,6 +159,19 @@ exports.getAllInvoices = async (req, res) => {
             ],
             include: [
                 {
+                    model: Transaction, // 🔥 Include the Transactions related to each Invoice
+                    as: 'Transactions', // Use the alias defined in the Invoice model association
+                    attributes: ['id', 'amount', 'transactionDate', 'method', 'description', 'createBy'], // Select relevant transaction attributes for list view
+                    required: false, // Use LEFT JOIN so invoices without transactions are included
+                    order: [['transactionDate', 'DESC']] // Optional: Order transactions within the array
+                },
+                {
+                    model: Charge, // Include the Charges within each Invoice
+                    as: 'Charges', // Use the alias defined in the Invoice model association
+                    attributes: ['id', 'name', 'amount', 'transactionType'], // Select key charge attributes for list view
+                    required: false // Use LEFT JOIN
+                },
+                {
                     model: Tenant, // Include the associated Tenant
                     attributes: ['id', 'name', 'phone', 'NIKNumber', 'tenancyStatus'], // Select relevant tenant attributes
                     required: false // Use LEFT JOIN
@@ -173,19 +186,6 @@ exports.getAllInvoices = async (req, res) => {
                         }
                     ],
                     required: false // Use LEFT JOIN
-                },
-                {
-                    model: Charge, // Include the Charges within each Invoice
-                    as: 'Charges', // Use the alias defined in the Invoice model association
-                    attributes: ['id', 'name', 'amount', 'transactionType'], // Select key charge attributes for list view
-                    required: false // Use LEFT JOIN
-                },
-                {
-                    model: Transaction, // 🔥 Include the Transactions related to each Invoice
-                    as: 'Transactions', // Use the alias defined in the Invoice model association
-                    attributes: ['id', 'amount', 'transactionDate', 'method', 'description', 'createBy'], // Select relevant transaction attributes for list view
-                    required: false, // Use LEFT JOIN so invoices without transactions are included
-                    order: [['transactionDate', 'DESC']] // Optional: Order transactions within the array
                 }
             ],
             order: [['issueDate', 'DESC']], // Default order: most recent invoices first
@@ -237,20 +237,22 @@ exports.getInvoiceById = async (req, res) => {
             ],
             include: [
                 {
-                    model: Tenant, // Include the associated Tenant
-                    attributes: ['id', 'name', 'phone', 'NIKNumber', 'tenancyStatus'], // Select relevant tenant attributes
-                    required: false // Use LEFT JOIN
-                },
-                {
-                    model: Room, // Include the associated Room for context
-                    attributes: ['id', 'roomNumber', 'roomSize', 'roomStatus'],
-                    include: [
-                        {
-                            model: BoardingHouse, // Include BoardingHouse nested within Room
-                            attributes: ['id', 'name', 'address'],
-                        }
+                    model: Transaction, // 🔥 Include ALL Transactions related to this Invoice
+                    as: 'Transactions', // Use the alias defined in the Invoice model association
+                    attributes: [ // Select all relevant transaction attributes
+                        'id',
+                        'amount',
+                        'transactionDate',
+                        'method',
+                        'transactionProofPath', // Include proof path for single view
+                        'description',
+                        'createBy',
+                        'updateBy',
+                        'createdAt',
+                        'updatedAt'
                     ],
-                    required: false // Use LEFT JOIN
+                    required: false, // Use LEFT JOIN so invoices without transactions are included
+                    order: [['transactionDate', 'DESC']] // Optional: Order transactions
                 },
                 {
                     model: Charge, // Include ALL Charges within this Invoice
@@ -270,22 +272,20 @@ exports.getInvoiceById = async (req, res) => {
                     order: [['createdAt', 'ASC']] // Optional: Order charges
                 },
                 {
-                    model: Transaction, // 🔥 Include ALL Transactions related to this Invoice
-                    as: 'Transactions', // Use the alias defined in the Invoice model association
-                    attributes: [ // Select all relevant transaction attributes
-                        'id',
-                        'amount',
-                        'transactionDate',
-                        'method',
-                        'transactionProofPath', // Include proof path for single view
-                        'description',
-                        'createBy',
-                        'updateBy',
-                        'createdAt',
-                        'updatedAt'
+                    model: Tenant, // Include the associated Tenant
+                    attributes: ['id', 'name', 'phone', 'NIKNumber', 'tenancyStatus'], // Select relevant tenant attributes
+                    required: false // Use LEFT JOIN
+                },
+                {
+                    model: Room, // Include the associated Room for context
+                    attributes: ['id', 'roomNumber', 'roomSize', 'roomStatus'],
+                    include: [
+                        {
+                            model: BoardingHouse, // Include BoardingHouse nested within Room
+                            attributes: ['id', 'name', 'address'],
+                        }
                     ],
-                    required: false, // Use LEFT JOIN so invoices without transactions are included
-                    order: [['transactionDate', 'DESC']] // Optional: Order transactions
+                    required: false // Use LEFT JOIN
                 }
             ]
         });

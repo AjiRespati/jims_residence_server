@@ -21,6 +21,7 @@ exports.getAllTenants = async (req, res) => {
                 'tenancyStatus',
                 'startDate',
                 'dueDate',
+                'endDate',
                 'banishDate',
                 'createBy',
                 'updateBy',

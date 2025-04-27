@@ -10,7 +10,6 @@ const fs = require("fs");
 
 // Method to record a new payment transaction
 exports.recordPayment = async (req, res) => {
-    logger.info("✅ SAMPE SINI GAK?????         .....");
     const t = await sequelize.transaction(); // Start a transaction
 
     try {
