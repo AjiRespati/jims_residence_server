@@ -2,7 +2,7 @@ const db = require("../models");
 const sequelize = db.sequelize;
 // const Sequelize = db.Sequelize;
 
-const { Tenant, Room, Invoice, Charge, BoardingHouse } = require('../models');
+const { Invoice, Charge, Transaction, Tenant, Room, BoardingHouse } = require('../models');
 const logger = require('../config/logger');
 const path = require("path");
 const fs = require("fs");
@@ -161,6 +161,7 @@ exports.getAllInvoices = async (req, res) => {
                 {
                     model: Tenant, // Include the associated Tenant
                     attributes: ['id', 'name', 'phone', 'NIKNumber', 'tenancyStatus'], // Select relevant tenant attributes
+                    required: false // Use LEFT JOIN
                 },
                 {
                     model: Room, // Include the associated Room for context
@@ -178,6 +179,13 @@ exports.getAllInvoices = async (req, res) => {
                     as: 'Charges', // Use the alias defined in the Invoice model association
                     attributes: ['id', 'name', 'amount', 'transactionType'], // Select key charge attributes for list view
                     required: false // Use LEFT JOIN
+                },
+                {
+                    model: Transaction, // 🔥 Include the Transactions related to each Invoice
+                    as: 'Transactions', // Use the alias defined in the Invoice model association
+                    attributes: ['id', 'amount', 'transactionDate', 'method', 'description', 'createBy'], // Select relevant transaction attributes for list view
+                    required: false, // Use LEFT JOIN so invoices without transactions are included
+                    order: [['transactionDate', 'DESC']] // Optional: Order transactions within the array
                 }
             ],
             order: [['issueDate', 'DESC']], // Default order: most recent invoices first
@@ -185,7 +193,7 @@ exports.getAllInvoices = async (req, res) => {
 
         res.status(200).json({
             success: true,
-            message: 'Invoices retrieved successfully',
+            message: 'Invoices retrieved successfully with associated charges and transactions',
             data: invoices
         });
 
@@ -231,6 +239,7 @@ exports.getInvoiceById = async (req, res) => {
                 {
                     model: Tenant, // Include the associated Tenant
                     attributes: ['id', 'name', 'phone', 'NIKNumber', 'tenancyStatus'], // Select relevant tenant attributes
+                    required: false // Use LEFT JOIN
                 },
                 {
                     model: Room, // Include the associated Room for context
@@ -259,8 +268,25 @@ exports.getInvoiceById = async (req, res) => {
                     ],
                     required: false, // Use LEFT JOIN
                     order: [['createdAt', 'ASC']] // Optional: Order charges
+                },
+                {
+                    model: Transaction, // 🔥 Include ALL Transactions related to this Invoice
+                    as: 'Transactions', // Use the alias defined in the Invoice model association
+                    attributes: [ // Select all relevant transaction attributes
+                        'id',
+                        'amount',
+                        'transactionDate',
+                        'method',
+                        'transactionProofPath', // Include proof path for single view
+                        'description',
+                        'createBy',
+                        'updateBy',
+                        'createdAt',
+                        'updatedAt'
+                    ],
+                    required: false, // Use LEFT JOIN so invoices without transactions are included
+                    order: [['transactionDate', 'DESC']] // Optional: Order transactions
                 }
-                // If you implement a Transaction model for payments received, include it here
             ]
         });
 
@@ -278,7 +304,7 @@ exports.getInvoiceById = async (req, res) => {
 
         res.status(200).json({
             success: true,
-            message: 'Invoice retrieved successfully with associated details',
+            message: 'Invoice retrieved successfully with associated details, charges, and transactions',
             data: invoiceData // Send the nested data
         });
 
