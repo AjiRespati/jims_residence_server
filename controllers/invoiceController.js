@@ -138,9 +138,38 @@ exports.createInvoice = async (req, res) => {
 // Method to get all invoices
 exports.getAllInvoices = async (req, res) => {
     try {
-        // Optional: Implement filtering, pagination, sorting based on query parameters (req.query)
-        // For now, fetch all invoices with key associations
+        // Extract filter parameters from query string
+        const { boardingHouseId } = req.query;
 
+        // Prepare the where clause for the BoardingHouse include
+        const boardingHouseWhere = {};
+        let isBoardingHouseFilterApplied = false;
+
+        if (boardingHouseId) {
+            boardingHouseWhere.id = boardingHouseId;
+            isBoardingHouseFilterApplied = true;
+        }
+
+        // Define the Room include configuration
+        // Apply the where clause directly to the BoardingHouse include
+        const roomIncludeConfig = {
+            model: Room, // Include the associated Room
+            attributes: ['id', 'roomNumber', 'roomSize', 'roomStatus'],
+            include: [
+                {
+                    model: BoardingHouse, // Include BoardingHouse nested within Room
+                    attributes: ['id', 'name'],
+                    where: boardingHouseWhere, // 🔥 Apply where clause directly here
+                    required: isBoardingHouseFilterApplied // 🔥 Require BoardingHouse if filtering by it
+                }
+            ],
+            // 🔥 The Room include itself must be required if its nested BoardingHouse is required
+            required: isBoardingHouseFilterApplied
+            // If not filtering by boardingHouse, required remains false (LEFT JOIN),
+            // so invoices without a room (if tenantId is also null) are still included.
+        };
+
+        // Find all invoices with key associations and apply the filter
         const invoices = await Invoice.findAll({
             attributes: [
                 'id',
@@ -159,41 +188,31 @@ exports.getAllInvoices = async (req, res) => {
             ],
             include: [
                 {
-                    model: Transaction, // 🔥 Include the Transactions related to each Invoice
-                    as: 'Transactions', // Use the alias defined in the Invoice model association
-                    attributes: ['id', 'amount', 'transactionDate', 'method', 'description', 'createBy'], // Select relevant transaction attributes for list view
-                    required: false, // Use LEFT JOIN so invoices without transactions are included
-                    order: [['transactionDate', 'DESC']] // Optional: Order transactions within the array
+                    model: Transaction, // Include the Transactions related to each Invoice
+                    as: 'Transactions',
+                    attributes: ['id', 'amount', 'transactionDate', 'method', 'description', 'createBy'],
+                    required: false,
+                    order: [['transactionDate', 'DESC']]
                 },
                 {
                     model: Charge, // Include the Charges within each Invoice
-                    as: 'Charges', // Use the alias defined in the Invoice model association
-                    attributes: ['id', 'name', 'amount', 'transactionType'], // Select key charge attributes for list view
-                    required: false // Use LEFT JOIN
+                    as: 'Charges',
+                    attributes: ['id', 'name', 'amount', 'transactionType'],
+                    required: false
                 },
                 {
                     model: Tenant, // Include the associated Tenant
-                    attributes: ['id', 'name', 'phone', 'NIKNumber', 'tenancyStatus'], // Select relevant tenant attributes
-                    required: false // Use LEFT JOIN
+                    attributes: ['id', 'name', 'phone', 'NIKNumber', 'tenancyStatus'],
+                    required: false
                 },
-                {
-                    model: Room, // Include the associated Room for context
-                    attributes: ['id', 'roomNumber', 'roomSize', 'roomStatus'],
-                    include: [
-                        {
-                            model: BoardingHouse, // Include BoardingHouse nested within Room
-                            attributes: ['id', 'name'],
-                        }
-                    ],
-                    required: false // Use LEFT JOIN
-                }
+                roomIncludeConfig // Use the prepared Room include configuration
             ],
-            order: [['issueDate', 'DESC']], // Default order: most recent invoices first
+            order: [['issueDate', 'DESC']], // Default order
         });
 
         res.status(200).json({
             success: true,
-            message: 'Invoices retrieved successfully with associated charges and transactions',
+            message: isBoardingHouseFilterApplied ? `Invoices retrieved successfully for Boarding House ID: ${boardingHouseId}` : 'All invoices retrieved successfully',
             data: invoices
         });
 
