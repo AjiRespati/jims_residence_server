@@ -2,7 +2,7 @@ const db = require("../models");
 const sequelize = db.sequelize;
 // const Sequelize = db.Sequelize;
 
-const { Tenant, Transaction, Invoice, Charge } = require('../models');
+const { Tenant, Transaction, Invoice, Room } = require('../models');
 const logger = require('../config/logger');
 const path = require("path");
 const fs = require("fs");
@@ -10,6 +10,7 @@ const fs = require("fs");
 
 // Method to record a new payment transaction
 exports.recordPayment = async (req, res) => {
+    logger.info("✅ SAMPE SINI GAK?????         .....");
     const t = await sequelize.transaction(); // Start a transaction
 
     try {
@@ -111,17 +112,17 @@ exports.recordPayment = async (req, res) => {
         });
 
 
-        res.status(201).json({
+        res.status(200).json({
             success: true,
             message: 'Payment transaction recorded and invoice updated successfully',
             data: transactionWithInvoice // Return the created transaction with details
         });
 
     } catch (error) {
-        // If any error occurs, rollback the transaction
-        await t.rollback();
         logger.error(`❌ recordPayment error: ${error.message}`);
         logger.error(error.stack);
+        // If any error occurs, rollback the transaction
+        await t.rollback();
         // Optional: If an error occurred *after* middleware uploaded a file, you might want to delete the file here too.
         // This requires checking if req.transactionProofPath exists in the catch block.
         if (req.transactionProofPath) {

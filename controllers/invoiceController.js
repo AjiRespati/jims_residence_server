@@ -120,7 +120,7 @@ exports.createInvoice = async (req, res) => {
         });
 
 
-        res.status(201).json({
+        res.status(200).json({
             success: true,
             message: 'Invoice created successfully',
             data: invoiceWithDetails // Return the created invoice with details
