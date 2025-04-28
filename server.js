@@ -65,5 +65,5 @@ sequelize.sync({ alter: true })
         console.log(err);
         logger.error("❌ Database sync error:");
         logger.error(err.message);
-        logger.error(err.stack);
+        logger.error(err);
     });
