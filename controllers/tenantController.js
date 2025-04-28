@@ -1,6 +1,7 @@
 const db = require("../models");
 const sequelize = db.sequelize;
-// const Sequelize = db.Sequelize;
+const Sequelize = db.Sequelize;
+const { Op } = Sequelize;
 
 const { Tenant, Room, Price, AdditionalPrice, OtherCost,
     Invoice, Charge, BoardingHouse
@@ -12,7 +13,66 @@ const fs = require("fs");
 exports.getAllTenants = async (req, res) => {
     try {
         // Extract filter parameters from query string
-        const { boardingHouseId } = req.query;
+        const { boardingHouseId, dateFrom, dateTo } = req.query;
+
+        // Prepare the where clause for the main Tenant query
+        const tenantWhere = {};
+        let isDateFilterApplied = false;
+
+        // Add date filter if dateFrom and dateTo are provided and valid
+        if (dateFrom && dateTo) {
+            const fromDate = new Date(dateFrom);
+            const toDate = new Date(dateTo);
+
+            if (!isNaN(fromDate.getTime()) && !isNaN(toDate.getTime())) {
+                // Adjust toDate to include the entire end day
+                toDate.setHours(23, 59, 59, 999);
+
+                tenantWhere.startDate = { // 🔥 Filtering by Tenant's startDate
+                    [Op.between]: [fromDate, toDate]
+                };
+                isDateFilterApplied = true;
+            } else {
+                // Handle invalid date formats
+                return res.status(400).json({
+                    success: false,
+                    message: 'Invalid date format for dateFrom or dateTo. Use YYYY-MM-DD.',
+                    data: null
+                });
+            }
+        } else if (dateFrom) {
+            // Handle only dateFrom provided
+            const fromDate = new Date(dateFrom);
+            if (!isNaN(fromDate.getTime())) {
+                tenantWhere.startDate = { // 🔥 Filtering by Tenant's startDate
+                    [Op.gte]: fromDate
+                };
+                isDateFilterApplied = true;
+            } else {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Invalid date format for dateFrom. Use YYYY-MM-DD.',
+                    data: null
+                });
+            }
+        } else if (dateTo) {
+            // Handle only dateTo provided
+            const toDate = new Date(dateTo);
+            if (!isNaN(toDate.getTime())) {
+                toDate.setHours(23, 59, 59, 999); // Include the entire end day
+                tenantWhere.startDate = { // 🔥 Filtering by Tenant's startDate
+                    [Op.lte]: toDate
+                };
+                isDateFilterApplied = true;
+            } else {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Invalid date format for dateTo. Use YYYY-MM-DD.',
+                    data: null
+                });
+            }
+        }
+
 
         // Prepare the where clause for the BoardingHouse include
         const boardingHouseWhere = {};
@@ -24,31 +84,24 @@ exports.getAllTenants = async (req, res) => {
         }
 
         // Define the Room include configuration
-        // Apply the where clause directly to the BoardingHouse include
         const roomIncludeConfig = {
             model: Room, // Include the associated Room
-            attributes: ['id', 'roomNumber', 'roomSize', 'roomStatus'], // Include id to be safe, plus others
+            attributes: ['id', 'roomNumber', 'roomSize', 'roomStatus'],
             include: [
                 {
                     model: BoardingHouse, // Include BoardingHouse nested within Room
                     attributes: ['id', 'name'],
-                    where: boardingHouseWhere, // 🔥 Apply where clause directly here
-                    required: isBoardingHouseFilterApplied // 🔥 Require BoardingHouse if filtering by it
+                    where: boardingHouseWhere, // Apply where clause directly here
+                    required: isBoardingHouseFilterApplied // Require BoardingHouse if filtering by it
                 }
             ],
-            // 🔥 The Room include itself must be required if its nested BoardingHouse is required
-            required: isBoardingHouseFilterApplied
-            // Note: Your original code had required: true for Room include.
-            // When filtering by boardingHouse, it must be true.
-            // If you want to include tenants *without* rooms when *not* filtering,
-            // you would need more complex logic or a separate query,
-            // but given roomId is allowNull: false on Tenant, required: true might be intended always.
-            // Let's stick to required: isBoardingHouseFilterApplied for conditional filtering.
+            required: isBoardingHouseFilterApplied // Require Room if filtering by BoardingHouse
         };
 
 
         // Find all tenants and include specified associated data
         const tenants = await Tenant.findAll({
+            where: tenantWhere, // 🔥 Apply the date filter to the main query
             attributes: [
                 'id',
                 'name',
@@ -57,7 +110,6 @@ exports.getAllTenants = async (req, res) => {
                 'tenancyStatus',
                 'startDate',
                 'dueDate',
-                'endDate',
                 'banishDate',
                 'createBy',
                 'updateBy',
@@ -68,35 +120,21 @@ exports.getAllTenants = async (req, res) => {
                 roomIncludeConfig, // Use the prepared Room include configuration
                 {
                     model: Invoice, // Include associated Invoices
-                    attributes: [ // Select relevant Invoice attributes
-                        'id',
-                        'periodStart',
-                        'periodEnd',
-                        'issueDate',
-                        'dueDate',
-                        'totalAmountDue',
-                        'totalAmountPaid',
-                        'status',
-                        'description'
+                    attributes: [
+                        'id', 'periodStart', 'periodEnd', 'issueDate', 'dueDate',
+                        'totalAmountDue', 'totalAmountPaid', 'status', 'description'
                     ],
                     where: {
-                        // Filter for outstanding invoices
                         status: ['Issued', 'Unpaid', 'PartiallyPaid']
                     },
-                    required: false, // Use LEFT JOIN so tenants without outstanding invoices are also included
-                    order: [['dueDate', 'ASC']], // Optional: Order invoices by due date
+                    required: false,
+                    order: [['dueDate', 'ASC']],
                     include: [
                         {
                             model: Charge, // Include the Charges within the outstanding Invoice
-                            as: 'Charges', // Use the alias defined in the Invoice model association
-                            attributes: [ // Select relevant Charge attributes
-                                'id',
-                                'name',
-                                'amount',
-                                'description',
-                                'transactionType'
-                            ],
-                            required: false // Use LEFT JOIN
+                            as: 'Charges',
+                            attributes: ['id', 'name', 'amount', 'description', 'transactionType'],
+                            required: false
                         }
                     ]
                 }
@@ -108,7 +146,6 @@ exports.getAllTenants = async (req, res) => {
             const tenantData = tenant.toJSON(); // Convert Sequelize instance to plain JSON object
 
             // Extract roomNumber and boardingHouseName from nested objects
-            // Use optional chaining (?.) for safer access
             const roomNumber = tenantData.Room?.roomNumber || null;
             const boardingHouseName = tenantData.Room?.BoardingHouse?.name || null;
 
@@ -124,10 +161,19 @@ exports.getAllTenants = async (req, res) => {
             return tenantData;
         });
 
+        let message = 'Tenants retrieved successfully with outstanding invoices, room number, and boarding house name';
+        if (isBoardingHouseFilterApplied && isDateFilterApplied) {
+            message = `Tenants retrieved successfully for Boarding House ID: ${boardingHouseId} and start date range: ${dateFrom} to ${dateTo}`;
+        } else if (isBoardingHouseFilterApplied) {
+            message = `Tenants retrieved successfully for Boarding House ID: ${boardingHouseId}`;
+        } else if (isDateFilterApplied) {
+            message = `Tenants retrieved successfully for start date range: ${dateFrom} to ${dateTo}`;
+        }
+
 
         res.status(200).json({
             success: true,
-            message: isBoardingHouseFilterApplied ? `Tenants retrieved successfully for Boarding House ID: ${boardingHouseId}` : 'All tenants retrieved successfully',
+            message: message,
             data: flattenedTenants // Send the flattened data
         });
 

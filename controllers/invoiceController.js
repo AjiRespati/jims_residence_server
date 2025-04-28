@@ -1,6 +1,7 @@
 const db = require("../models");
 const sequelize = db.sequelize;
-// const Sequelize = db.Sequelize;
+const Sequelize = db.Sequelize;
+const { Op } = Sequelize;
 
 const { Invoice, Charge, Transaction, Tenant, Room, BoardingHouse } = require('../models');
 const logger = require('../config/logger');
@@ -139,7 +140,66 @@ exports.createInvoice = async (req, res) => {
 exports.getAllInvoices = async (req, res) => {
     try {
         // Extract filter parameters from query string
-        const { boardingHouseId } = req.query;
+        const { boardingHouseId, dateFrom, dateTo } = req.query;
+
+        // Prepare the where clause for the main Invoice query
+        const invoiceWhere = {};
+        let isDateFilterApplied = false;
+
+        // Add date filter if dateFrom and dateTo are provided and valid
+        if (dateFrom && dateTo) {
+            const fromDate = new Date(dateFrom);
+            const toDate = new Date(dateTo);
+
+            if (!isNaN(fromDate.getTime()) && !isNaN(toDate.getTime())) {
+                // Adjust toDate to include the entire end day
+                toDate.setHours(23, 59, 59, 999);
+
+                invoiceWhere.issueDate = { // 🔥 Filtering by Invoice's issueDate
+                    [Op.between]: [fromDate, toDate]
+                };
+                isDateFilterApplied = true;
+            } else {
+                // Handle invalid date formats
+                return res.status(400).json({
+                    success: false,
+                    message: 'Invalid date format for dateFrom or dateTo. Use YYYY-MM-DD.',
+                    data: null
+                });
+            }
+        } else if (dateFrom) {
+            // Handle only dateFrom provided
+            const fromDate = new Date(dateFrom);
+            if (!isNaN(fromDate.getTime())) {
+                invoiceWhere.issueDate = { // 🔥 Filtering by Invoice's issueDate
+                    [Op.gte]: fromDate
+                };
+                isDateFilterApplied = true;
+            } else {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Invalid date format for dateFrom. Use YYYY-MM-DD.',
+                    data: null
+                });
+            }
+        } else if (dateTo) {
+            // Handle only dateTo provided
+            const toDate = new Date(dateTo);
+            if (!isNaN(toDate.getTime())) {
+                toDate.setHours(23, 59, 59, 999); // Include the entire end day
+                invoiceWhere.issueDate = { // 🔥 Filtering by Invoice's issueDate
+                    [Op.lte]: toDate
+                };
+                isDateFilterApplied = true;
+            } else {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Invalid date format for dateTo. Use YYYY-MM-DD.',
+                    data: null
+                });
+            }
+        }
+
 
         // Prepare the where clause for the BoardingHouse include
         const boardingHouseWhere = {};
@@ -165,12 +225,11 @@ exports.getAllInvoices = async (req, res) => {
             ],
             // 🔥 The Room include itself must be required if its nested BoardingHouse is required
             required: isBoardingHouseFilterApplied
-            // If not filtering by boardingHouse, required remains false (LEFT JOIN),
-            // so invoices without a room (if tenantId is also null) are still included.
         };
 
         // Find all invoices with key associations and apply the filter
         const invoices = await Invoice.findAll({
+            where: invoiceWhere, // 🔥 Apply the date filter to the main query
             attributes: [
                 'id',
                 'periodStart',
@@ -210,9 +269,19 @@ exports.getAllInvoices = async (req, res) => {
             order: [['issueDate', 'DESC']], // Default order
         });
 
+        let message = 'Invoices retrieved successfully';
+        if (isBoardingHouseFilterApplied && isDateFilterApplied) {
+            message = `Invoices retrieved successfully for Boarding House ID: ${boardingHouseId} and issue date range: ${dateFrom} to ${dateTo}`;
+        } else if (isBoardingHouseFilterApplied) {
+            message = `Invoices retrieved successfully for Boarding House ID: ${boardingHouseId}`;
+        } else if (isDateFilterApplied) {
+            message = `Invoices retrieved successfully for issue date range: ${dateFrom} to ${dateTo}`;
+        }
+
+
         res.status(200).json({
             success: true,
-            message: isBoardingHouseFilterApplied ? `Invoices retrieved successfully for Boarding House ID: ${boardingHouseId}` : 'All invoices retrieved successfully',
+            message: message,
             data: invoices
         });
 

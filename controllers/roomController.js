@@ -1,6 +1,7 @@
 const db = require("../models");
 const sequelize = db.sequelize;
-// const Sequelize = db.Sequelize;
+const Sequelize = db.Sequelize;
+const { Op } = Sequelize;
 
 const { BoardingHouse, Price, Room, Tenant, Payment, AdditionalPrice, OtherCost } = require('../models');
 const logger = require('../config/logger');
@@ -8,8 +9,66 @@ const logger = require('../config/logger');
 exports.getAllRooms = async (req, res) => {
     try {
         // Extract filter parameters from query string
-        // Assuming you want to filter by boardingHouseId from query, not kostId from params
-        const { boardingHouseId } = req.query;
+        const { boardingHouseId, dateFrom, dateTo } = req.query;
+
+        // Prepare the where clause for the main Room query
+        const roomWhere = {};
+        let isDateFilterApplied = false;
+
+        // Add date filter if dateFrom and dateTo are provided and valid
+        if (dateFrom && dateTo) {
+            const fromDate = new Date(dateFrom);
+            const toDate = new Date(dateTo);
+
+            if (!isNaN(fromDate.getTime()) && !isNaN(toDate.getTime())) {
+                // Adjust toDate to include the entire end day
+                toDate.setHours(23, 59, 59, 999);
+
+                roomWhere.createdAt = {
+                    [Op.between]: [fromDate, toDate]
+                };
+                isDateFilterApplied = true;
+            } else {
+                // Handle invalid date formats
+                return res.status(400).json({
+                    success: false,
+                    message: 'Invalid date format for dateFrom or dateTo. Use YYYY-MM-DD.',
+                    data: null
+                });
+            }
+        } else if (dateFrom) {
+            // Handle only dateFrom provided
+            const fromDate = new Date(dateFrom);
+            if (!isNaN(fromDate.getTime())) {
+                roomWhere.createdAt = {
+                    [Op.gte]: fromDate
+                };
+                isDateFilterApplied = true;
+            } else {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Invalid date format for dateFrom. Use YYYY-MM-DD.',
+                    data: null
+                });
+            }
+        } else if (dateTo) {
+            // Handle only dateTo provided
+            const toDate = new Date(dateTo);
+            if (!isNaN(toDate.getTime())) {
+                toDate.setHours(23, 59, 59, 999); // Include the entire end day
+                roomWhere.createdAt = {
+                    [Op.lte]: toDate
+                };
+                isDateFilterApplied = true;
+            } else {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Invalid date format for dateTo. Use YYYY-MM-DD.',
+                    data: null
+                });
+            }
+        }
+
 
         // Prepare the where clause for the BoardingHouse include
         const boardingHouseWhere = {};
@@ -24,14 +83,15 @@ exports.getAllRooms = async (req, res) => {
         const boardingHouseIncludeConfig = {
             model: BoardingHouse, // Include BoardingHouse nested within Room
             attributes: ['id', 'name', 'address'], // Include relevant attributes
-            where: boardingHouseWhere, // 🔥 Apply where clause directly here
-            required: isBoardingHouseFilterApplied // 🔥 Require BoardingHouse if filtering by it
+            where: boardingHouseWhere, // Apply where clause directly here
+            required: isBoardingHouseFilterApplied // Require BoardingHouse if filtering by it
         };
 
         // Find all rooms and include the associated BoardingHouse, Price,
         // and ONLY Active AdditionalPrice and OtherCost records
         // Apply the filter for BoardingHouse by making the BoardingHouse include required
         const rooms = await Room.findAll({
+            where: roomWhere, // 🔥 Apply the date filter to the main query
             include: [
                 boardingHouseIncludeConfig, // Use the prepared BoardingHouse include configuration
                 {
@@ -61,9 +121,7 @@ exports.getAllRooms = async (req, res) => {
                 }
             ],
             order: [['roomNumber', 'ASC']], // Default order
-            // 🔥 Apply the filter to the main query if boardingHouseId is provided
-            // Sequelize will handle the join through the 'required' include
-            where: isBoardingHouseFilterApplied ? { boardingHouseId: boardingHouseId } : {}
+            // The boardingHouseId filter is applied via the 'required' include and its where clause
         });
 
         const formattedRooms = rooms.map(room => {
@@ -114,9 +172,19 @@ exports.getAllRooms = async (req, res) => {
             return roomData;
         });
 
+        let message = 'Rooms retrieved successfully with calculated total price';
+        if (isBoardingHouseFilterApplied && isDateFilterApplied) {
+            message = `Rooms retrieved successfully for Boarding House ID: ${boardingHouseId} and date range: ${dateFrom} to ${dateTo}`;
+        } else if (isBoardingHouseFilterApplied) {
+            message = `Rooms retrieved successfully for Boarding House ID: ${boardingHouseId}`;
+        } else if (isDateFilterApplied) {
+            message = `Rooms retrieved successfully for date range: ${dateFrom} to ${dateTo}`;
+        }
+
+
         res.status(200).json({
             success: true,
-            message: isBoardingHouseFilterApplied ? `Rooms retrieved successfully for Boarding House ID: ${boardingHouseId}` : 'All rooms retrieved successfully with calculated total price',
+            message: message,
             data: formattedRooms
         });
 
