@@ -11,6 +11,42 @@ const fs = require("fs");
 
 exports.getAllTenants = async (req, res) => {
     try {
+        // Extract filter parameters from query string
+        const { boardingHouseId } = req.query;
+
+        // Prepare the where clause for the BoardingHouse include
+        const boardingHouseWhere = {};
+        let isBoardingHouseFilterApplied = false;
+
+        if (boardingHouseId) {
+            boardingHouseWhere.id = boardingHouseId;
+            isBoardingHouseFilterApplied = true;
+        }
+
+        // Define the Room include configuration
+        // Apply the where clause directly to the BoardingHouse include
+        const roomIncludeConfig = {
+            model: Room, // Include the associated Room
+            attributes: ['id', 'roomNumber', 'roomSize', 'roomStatus'], // Include id to be safe, plus others
+            include: [
+                {
+                    model: BoardingHouse, // Include BoardingHouse nested within Room
+                    attributes: ['id', 'name'],
+                    where: boardingHouseWhere, // 🔥 Apply where clause directly here
+                    required: isBoardingHouseFilterApplied // 🔥 Require BoardingHouse if filtering by it
+                }
+            ],
+            // 🔥 The Room include itself must be required if its nested BoardingHouse is required
+            required: isBoardingHouseFilterApplied
+            // Note: Your original code had required: true for Room include.
+            // When filtering by boardingHouse, it must be true.
+            // If you want to include tenants *without* rooms when *not* filtering,
+            // you would need more complex logic or a separate query,
+            // but given roomId is allowNull: false on Tenant, required: true might be intended always.
+            // Let's stick to required: isBoardingHouseFilterApplied for conditional filtering.
+        };
+
+
         // Find all tenants and include specified associated data
         const tenants = await Tenant.findAll({
             attributes: [
@@ -29,17 +65,7 @@ exports.getAllTenants = async (req, res) => {
                 'isNIKCopyDone'
             ],
             include: [
-                {
-                    model: Room, // Include the associated Room
-                    attributes: ['roomNumber'], // Select only roomNumber
-                    include: [
-                        {
-                            model: BoardingHouse, // Include the associated BoardingHouse nested within Room
-                            attributes: ['name'] // Select only the name
-                        }
-                    ],
-                    required: true // Ensure only tenants with associated rooms are returned
-                },
+                roomIncludeConfig, // Use the prepared Room include configuration
                 {
                     model: Invoice, // Include associated Invoices
                     attributes: [ // Select relevant Invoice attributes
@@ -70,7 +96,7 @@ exports.getAllTenants = async (req, res) => {
                                 'description',
                                 'transactionType'
                             ],
-                            required: false // Use LEFT JOIN so invoices without charges (unlikely) are included
+                            required: false // Use LEFT JOIN
                         }
                     ]
                 }
@@ -82,8 +108,9 @@ exports.getAllTenants = async (req, res) => {
             const tenantData = tenant.toJSON(); // Convert Sequelize instance to plain JSON object
 
             // Extract roomNumber and boardingHouseName from nested objects
-            const roomNumber = tenantData.Room ? tenantData.Room.roomNumber : null;
-            const boardingHouseName = (tenantData.Room && tenantData.Room.BoardingHouse) ? tenantData.Room.BoardingHouse.name : null;
+            // Use optional chaining (?.) for safer access
+            const roomNumber = tenantData.Room?.roomNumber || null;
+            const boardingHouseName = tenantData.Room?.BoardingHouse?.name || null;
 
             // Add roomNumber and boardingHouseName as top-level properties
             tenantData.roomNumber = roomNumber;
@@ -100,7 +127,7 @@ exports.getAllTenants = async (req, res) => {
 
         res.status(200).json({
             success: true,
-            message: 'Tenants retrieved successfully with outstanding invoices, room number, and boarding house name',
+            message: isBoardingHouseFilterApplied ? `Tenants retrieved successfully for Boarding House ID: ${boardingHouseId}` : 'All tenants retrieved successfully',
             data: flattenedTenants // Send the flattened data
         });
 
@@ -575,7 +602,7 @@ exports.updateTenant = async (req, res) => {
             });
         }
 
-        tenantUpdateData.updateBy =  req.user.username;
+        tenantUpdateData.updateBy = req.user.username;
 
         const updatedTenant = await tenant.update(tenantUpdateData); // , { transaction: t }
 

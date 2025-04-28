@@ -7,19 +7,33 @@ const logger = require('../config/logger');
 
 exports.getAllRooms = async (req, res) => {
     try {
-        const { kostId } = req.params;
-        let whereClause = {}
-        if (kostId) whereClause['id'] = kostId;
+        // Extract filter parameters from query string
+        // Assuming you want to filter by boardingHouseId from query, not kostId from params
+        const { boardingHouseId } = req.query;
+
+        // Prepare the where clause for the BoardingHouse include
+        const boardingHouseWhere = {};
+        let isBoardingHouseFilterApplied = false;
+
+        if (boardingHouseId) {
+            boardingHouseWhere.id = boardingHouseId;
+            isBoardingHouseFilterApplied = true;
+        }
+
+        // Define the BoardingHouse include configuration
+        const boardingHouseIncludeConfig = {
+            model: BoardingHouse, // Include BoardingHouse nested within Room
+            attributes: ['id', 'name', 'address'], // Include relevant attributes
+            where: boardingHouseWhere, // 🔥 Apply where clause directly here
+            required: isBoardingHouseFilterApplied // 🔥 Require BoardingHouse if filtering by it
+        };
 
         // Find all rooms and include the associated BoardingHouse, Price,
         // and ONLY Active AdditionalPrice and OtherCost records
+        // Apply the filter for BoardingHouse by making the BoardingHouse include required
         const rooms = await Room.findAll({
             include: [
-                {
-                    model: BoardingHouse,
-                    where: whereClause,
-                    attributes: ['id', 'name', 'address']
-                },
+                boardingHouseIncludeConfig, // Use the prepared BoardingHouse include configuration
                 {
                     model: Price,
                     attributes: ['id', 'roomSize', 'amount', 'name', 'description'] // Still fetch Price to get amount and roomSize
@@ -31,7 +45,7 @@ exports.getAllRooms = async (req, res) => {
                     order: [['startDate', 'DESC'], ['createdAt', 'DESC']],
                     limit: 1,
                     required: false,
-                    // include: [{ model: Payment, attributes: ['id', 'totalAmount', 'paymentDate', 'paymentStatus', 'description'] }]
+                    // include: [{ model: Payment, attributes: ['id', 'totalAmount', 'paymentDate', 'paymentStatus', 'description'] }] // Payments are handled via Tenant -> Invoice -> Transaction
                 },
                 {
                     model: AdditionalPrice, // Include ONLY Active AdditionalPrice records for calculation
@@ -46,7 +60,10 @@ exports.getAllRooms = async (req, res) => {
                     required: false // Use LEFT JOIN
                 }
             ],
-            order: [['roomNumber', 'ASC']],
+            order: [['roomNumber', 'ASC']], // Default order
+            // 🔥 Apply the filter to the main query if boardingHouseId is provided
+            // Sequelize will handle the join through the 'required' include
+            where: isBoardingHouseFilterApplied ? { boardingHouseId: boardingHouseId } : {}
         });
 
         const formattedRooms = rooms.map(room => {
@@ -99,7 +116,7 @@ exports.getAllRooms = async (req, res) => {
 
         res.status(200).json({
             success: true,
-            message: 'Rooms retrieved successfully with calculated total price',
+            message: isBoardingHouseFilterApplied ? `Rooms retrieved successfully for Boarding House ID: ${boardingHouseId}` : 'All rooms retrieved successfully with calculated total price',
             data: formattedRooms
         });
 
@@ -185,7 +202,7 @@ exports.getRoomById = async (req, res) => {
             latestTenant = roomData.Tenants[0];
             delete roomData.Tenants; // Remove the original array
         } else {
-             delete roomData.Tenants; // Remove the original array if empty
+            delete roomData.Tenants; // Remove the original array if empty
         }
 
         // Attach the latestTenant object (without Payments) to the room data
@@ -269,7 +286,7 @@ exports.createRoom = async (req, res) => {
             boardingHouseId,
             priceId, // Use the provided priceId
             roomNumber,
-            roomSize : price.roomSize, // Still includes roomSize based on your model
+            roomSize: price.roomSize, // Still includes roomSize based on your model
             roomStatus,
             description,
             createBy: req.user.username
