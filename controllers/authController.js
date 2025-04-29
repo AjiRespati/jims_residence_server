@@ -23,6 +23,7 @@ exports.register = async (req, res) => {
             phone,
             address,
             level: createLevel,
+            levelDesc: levelDescList[createLevel],
             updateBy
         });
 
@@ -128,3 +129,9 @@ exports.self = async (req, res) => {
         res.status(500).json({ message: 'Internal server error' });
     }
 };
+
+const levelDescList = [
+    "Penjaga Kost",
+    "Admin",
+    "Pemilik",
+];
