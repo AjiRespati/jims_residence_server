@@ -311,17 +311,31 @@ exports.createTenant = async (req, res) => {
             startDate, // Start of tenancy / First billing period start
             dueDate, // Due date for the first invoice
             banishDate, // Optional
-            endDate,
             NIKImagePath, // Optional
             isNIKCopyDone, // Optional, defaults in model
             tenancyStatus, // Optional, defaults in model
-            roomStatus, // Optional, defaults in model
+            createBy,
+            updateBy,
+            // Fields for Price creation (mandatory here)
+            priceAmount,
+            priceName, // Optional
+            priceDescription, // Optional
+            priceRoomSize, // Optional, defaults to 'Standard' in Price model
+            // New fields for optional AdditionalPrice and OtherCost creation
+            additionalPrices, // Optional array of AdditionalPrice data
+            otherCosts // Optional array of OtherCost data
         } = req.body;
 
-        // Basic validation for mandatory tenant fields
-        if (!roomId || !name || !phone || !NIKNumber || !startDate || !dueDate) {
+        // Basic validation for mandatory tenant fields + priceAmount
+        if (!roomId || !name || !phone || !NIKNumber || !startDate || !dueDate || priceAmount === undefined || priceAmount === null) {
             await t.rollback(); // Rollback transaction before sending error
-            return res.status(400).json({ message: 'Required tenant fields are missing: roomId, name, phone, NIKNumber, startDate, dueDate' });
+            return res.status(400).json({ message: 'Required fields are missing: roomId, name, phone, NIKNumber, startDate, dueDate, priceAmount' });
+        }
+
+        // Ensure priceAmount is a valid number
+        if (typeof priceAmount !== 'number' || priceAmount < 0) {
+            await t.rollback();
+            return res.status(400).json({ message: 'priceAmount must be a non-negative number' });
         }
 
         // Ensure startDate and dueDate are valid dates
@@ -334,38 +348,65 @@ exports.createTenant = async (req, res) => {
         }
 
 
-        // 1. Fetch the Room and its associated ACTIVE Price, AdditionalPrices, and OtherCosts within the transaction
-        const roomWithCosts = await Room.findByPk(roomId, {
-            include: [
-                {
-                    model: Price,
-                    attributes: ['id', 'name', 'amount', 'roomSize', 'description'], // Get attributes for Charge
-                    where: { status: 'active' },
-                    required: true, // Require an active price
-                },
-                {
-                    model: AdditionalPrice,
-                    attributes: ['id', 'name', 'amount', 'description'], // Get attributes for Charge
-                    where: { status: 'active' },
-                    required: false, // Don't require additional prices
-                },
-                {
-                    model: OtherCost,
-                    attributes: ['id', 'name', 'amount', 'description'], // Get attributes for Charge
-                    where: { status: 'active' },
-                    required: false, // Don't require other costs
-                }
-            ],
-            transaction: t // Include the transaction
-        });
+        // 1. Fetch the Room within the transaction
+        // We don't fetch AdditionalPrices or OtherCosts here because we are creating new ones if provided
+        const room = await Room.findByPk(roomId, { transaction: t });
 
-        // Validate if room was found and has an active price
-        if (!roomWithCosts || !roomWithCosts.Price) {
+        // Validate if room was found
+        if (!room) {
             await t.rollback(); // Rollback transaction
-            return res.status(404).json({ message: 'Room not found or does not have an active price associated.' });
+            return res.status(404).json({ message: 'Room not found.' });
         }
 
-        // 2. Create the Tenant record
+        // 2. Create the NEW Price record linked to the Room's Boarding House
+        const newPrice = await Price.create({
+            boardingHouseId: room.boardingHouseId, // Get BH ID from the Room
+            roomSize: priceRoomSize || 'Standard', // Use provided size or default
+            name: priceName || 'Base Rent', // Use provided name or default
+            amount: priceAmount, // Use the provided amount
+            description: priceDescription || `Base rent for ${priceRoomSize || 'Standard'} room`,
+            createBy: createBy,
+            updateBy: updateBy || createBy,
+            status: 'active' // New price is active by default
+        }, { transaction: t });
+
+        // 3. Update the Room to link it to the newly created Price
+        await room.update({ priceId: newPrice.id }, { transaction: t });
+
+        // 4. Create Optional AdditionalPrice records linked to the Room
+        let createdAdditionalPrices = [];
+        if (additionalPrices && Array.isArray(additionalPrices) && additionalPrices.length > 0) {
+            const additionalPriceData = additionalPrices.map(ap => ({
+                roomId: room.id, // Link to the Room
+                amount: ap.amount, // Assuming amount is mandatory and present
+                name: ap.name || 'Unnamed Additional Price', // Assuming name is mandatory or defaults
+                description: ap.description,
+                status: ap.status || 'active', // Default status if not provided
+                createBy: ap.createBy || createBy,
+                updateBy: ap.updateBy || updateBy || createBy,
+            }));
+            // Use bulkCreate for efficiency
+            createdAdditionalPrices = await AdditionalPrice.bulkCreate(additionalPriceData, { transaction: t });
+        }
+
+        // 5. Create Optional OtherCost records linked to the Room
+        let createdOtherCosts = [];
+        if (otherCosts && Array.isArray(otherCosts) && otherCosts.length > 0) {
+            const otherCostData = otherCosts.map(oc => ({
+                roomId: room.id, // Link to the Room
+                amount: oc.amount, // Assuming amount is mandatory and present
+                name: oc.name || 'Unnamed Other Cost', // Assuming name is mandatory or defaults
+                description: oc.description,
+                status: oc.status || 'active', // Default status if not provided
+                createBy: oc.createBy || createBy,
+                updateBy: oc.updateBy || updateBy || createBy,
+            }));
+            // Use bulkCreate for efficiency
+            createdOtherCosts = await OtherCost.bulkCreate(otherCostData, { transaction: t });
+        }
+
+
+        // 6. Create the Tenant record
         const newTenant = await Tenant.create({
             roomId,
             name,
@@ -374,15 +415,14 @@ exports.createTenant = async (req, res) => {
             startDate: tenantStartDate, // Use validated date
             dueDate: invoiceDueDate, // Tenant's contract due date / First invoice due date
             banishDate,
-            endDate,
             NIKImagePath,
             isNIKCopyDone,
-            tenancyStatus: tenancyStatus || 'Active',
-            createBy: req.user.username,
-            updateBy: req.user.username,
+            tenancyStatus: tenancyStatus || 'Active', // Use provided status or default
+            createBy,
+            updateBy: updateBy || createBy,
         }, { transaction: t }); // Include the transaction
 
-        // 3. Create the initial Invoice record for the new tenant
+        // 7. Create the initial Invoice record for the new tenant
         // Calculate billing period dates (e.g., one month from start date)
         const invoicePeriodEnd = new Date(tenantStartDate);
         invoicePeriodEnd.setMonth(invoicePeriodEnd.getMonth() + 1);
@@ -390,7 +430,7 @@ exports.createTenant = async (req, res) => {
 
         const firstInvoice = await Invoice.create({
             tenantId: newTenant.id,
-            roomId: roomWithCosts.id, // Link to the room
+            roomId: room.id, // Link to the room
             periodStart: tenantStartDate, // Billing starts on tenancy start date
             periodEnd: invoicePeriodEnd, // Billing ends one month later
             issueDate: new Date(), // Invoice issued today
@@ -398,44 +438,43 @@ exports.createTenant = async (req, res) => {
             totalAmountDue: 0, // Will calculate and update later
             totalAmountPaid: 0, // Initially no amount paid
             status: 'Issued', // Or 'Unpaid' depending on your flow
-            description: `Initial invoice for room ${roomWithCosts.roomNumber || roomId} period: ${tenantStartDate.toISOString().split('T')[0]} to ${invoicePeriodEnd.toISOString().split('T')[0]}`, // Example description
-            createBy: req.user.username,
-            updateBy: req.user.username,
+            description: `Initial invoice for room ${room.roomNumber || roomId} period: ${tenantStartDate.toISOString().split('T')[0]} to ${invoicePeriodEnd.toISOString().split('T')[0]}`, // Example description
+            createBy: createBy,
+            updateBy: updateBy || createBy,
         }, { transaction: t }); // Include the transaction
 
 
-        // 4. Prepare and create Charge records for each active cost component, linking to the Invoice
+        // 8. Prepare and create Charge records for the NEW Price and NEWLY CREATED Additional/Other Costs, linking to the Invoice
         const chargesToCreate = [];
         let calculatedTotalAmountDue = 0;
 
-        // Charge for the main Room Price
-        if (roomWithCosts.Price) {
+        // Charge for the NEWLY CREATED Price
+        if (newPrice) { // This should always be true if creation succeeded
             const priceCharge = {
                 invoiceId: firstInvoice.id, // Link to the new Invoice
-                name: roomWithCosts.Price.name || 'Room Price',
-                amount: roomWithCosts.Price.amount,
+                name: newPrice.name,
+                amount: newPrice.amount,
+                description: newPrice.description || `Base rent for ${newPrice.roomSize} room`,
                 transactionType: 'debit',
-                description: roomWithCosts.Price.description || `Base rent for ${roomWithCosts.Price.roomSize} room`,
-
-                createBy: req.user.username,
-                updateBy: req.user.username,
-                // Optional: costOriginType: 'price', costOriginId: roomWithCosts.Price.id
+                createBy: createBy,
+                updateBy: updateBy || createBy,
+                // Optional: costOriginType: 'price', costOriginId: newPrice.id
             };
             chargesToCreate.push(priceCharge);
             calculatedTotalAmountDue += priceCharge.amount;
         }
 
-        // Charges for Additional Prices
-        if (roomWithCosts.AdditionalPrices && roomWithCosts.AdditionalPrices.length > 0) {
-            roomWithCosts.AdditionalPrices.forEach(ap => {
+        // Charges for NEWLY CREATED Additional Prices
+        if (createdAdditionalPrices && createdAdditionalPrices.length > 0) {
+            createdAdditionalPrices.forEach(ap => {
                 const additionalCharge = {
                     invoiceId: firstInvoice.id, // Link to the new Invoice
                     name: ap.name || 'Additional Cost',
                     amount: ap.amount,
                     description: ap.description || 'Additional charge details',
                     transactionType: 'debit',
-                    createBy: req.user.username,
-                    updateBy: req.user.username,
+                    createBy: createBy,
+                    updateBy: updateBy || createBy,
                     // Optional: costOriginType: 'additionalPrice', costOriginId: ap.id
                 };
                 chargesToCreate.push(additionalCharge);
@@ -443,17 +482,17 @@ exports.createTenant = async (req, res) => {
             });
         }
 
-        // Charges for Other Costs
-        if (roomWithCosts.OtherCosts && roomWithCosts.OtherCosts.length > 0) {
-            roomWithCosts.OtherCosts.forEach(oc => {
+        // Charges for NEWLY CREATED Other Costs
+        if (createdOtherCosts && createdOtherCosts.length > 0) {
+            createdOtherCosts.forEach(oc => {
                 const otherCharge = {
                     invoiceId: firstInvoice.id, // Link to the new Invoice
                     name: oc.name || 'Other Cost',
                     amount: oc.amount,
                     description: oc.description || 'Other cost details',
                     transactionType: 'debit',
-                    createBy: req.user.username,
-                    updateBy: req.user.username,
+                    createBy: createBy,
+                    updateBy: updateBy || createBy,
                     // Optional: costOriginType: 'otherCost', costOriginId: oc.id
                 };
                 chargesToCreate.push(otherCharge);
@@ -462,42 +501,54 @@ exports.createTenant = async (req, res) => {
         }
 
         // Create all prepared Charge records in bulk
-        const createdCharges = await Charge.bulkCreate(chargesToCreate, { transaction: t });
+        if (chargesToCreate.length > 0) {
+            await Charge.bulkCreate(chargesToCreate, { transaction: t });
+        }
 
-        // 5. Update the totalAmountDue on the Invoice record
+
+        // 9. Update the totalAmountDue on the Invoice record
         await firstInvoice.update({ totalAmountDue: calculatedTotalAmountDue }, { transaction: t });
 
-        await roomWithCosts.update(
-            {
-                updateBy: req.user.username,
-                roomStatus: roomStatus || 'Terisi'
-            },
-            { transaction: t }
-        );
 
         // If all operations were successful, commit the transaction
         await t.commit();
 
-        // 6. Fetch the newly created Tenant with their first Invoice (including Charges) for the response
+        // 10. Fetch the newly created Tenant with their first Invoice (including Charges), the NEW Price, and the NEW Additional/Other Costs for the response
         const tenantWithDetails = await Tenant.findByPk(newTenant.id, {
             include: [
                 {
                     model: Room,
-                    attributes: ['id', 'roomNumber', 'roomSize', 'roomStatus'],
-                    include: {
-                        model: BoardingHouse,
-                        attributes: ['id', 'name']
-                    }
+                    attributes: ['id', 'roomNumber', 'roomSize', 'roomStatus', 'priceId'], // Include priceId to show it's linked
+                    include: [
+                        {
+                            model: BoardingHouse,
+                            attributes: ['id', 'name']
+                        },
+                        { // Include the NEWLY CREATED Price linked via Room
+                            model: Price,
+                            attributes: ['id', 'name', 'amount', 'roomSize', 'description', 'status']
+                        },
+                        { // 🔥 Include the NEWLY CREATED AdditionalPrices linked via Room
+                            model: AdditionalPrice,
+                            attributes: ['id', 'name', 'amount', 'description', 'status'],
+                            where: { status: 'active' }, // Only include active ones
+                            required: false // Use LEFT JOIN
+                        },
+                        { // 🔥 Include the NEWLY CREATED OtherCosts linked via Room
+                            model: OtherCost,
+                            attributes: ['id', 'name', 'amount', 'description', 'status'],
+                            where: { status: 'active' }, // Only include active ones
+                            required: false // Use LEFT JOIN
+                        }
+                    ]
                 },
                 {
                     model: Invoice, // Include the associated Invoices
-                    // Filter to include only the first invoice created in this transaction if needed,
-                    // but since it's the first and only one, including all invoices for the new tenant is fine.
                     attributes: ['id', 'periodStart', 'periodEnd', 'issueDate', 'dueDate', 'totalAmountDue', 'totalAmountPaid', 'status', 'description', 'createBy'],
                     include: [
                         {
                             model: Charge, // Include the Charges within the Invoice
-                            as: 'Charges', // Use the alias defined in the Invoice model association
+                            as: 'Charges',
                             attributes: ['id', 'name', 'amount', 'description', 'transactionType', 'createBy'],
                         }
                     ]
@@ -506,7 +557,7 @@ exports.createTenant = async (req, res) => {
         });
 
 
-        res.status(200).json(tenantWithDetails); // Return the created tenant with details and their first invoice
+        res.status(200).json(tenantWithDetails); // Return the created tenant with details, first invoice, and the new price/costs
 
     } catch (error) {
         logger.error(`❌ createTenant error: ${error.message}`);

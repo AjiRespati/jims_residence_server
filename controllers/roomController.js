@@ -317,14 +317,15 @@ exports.getRoomById = async (req, res) => {
     }
 };
 
+// Method to create a new room (MODIFIED - No longer requires priceId)
 exports.createRoom = async (req, res) => {
     try {
+        // Removed priceId from required fields
+        const { boardingHouseId, roomNumber, roomSize, roomStatus, description, createBy, updateBy } = req.body;
 
-        const { boardingHouseId, priceId, roomNumber, roomSize, roomStatus, description } = req.body;
-
-        // Basic validation - now includes priceId
-        if (!boardingHouseId || !priceId || !roomNumber || !roomSize || !roomStatus) {
-            return res.status(400).json({ message: 'Required fields are missing: boardingHouseId, priceId, roomNumber, roomSize, roomStatus' });
+        // Basic validation - priceId is no longer required here
+        if (!boardingHouseId || !roomNumber || !roomStatus) {
+            return res.status(400).json({ message: 'Required fields are missing: boardingHouseId, roomNumber, roomStatus' });
         }
 
         // Check if the boarding house exists
@@ -333,52 +334,27 @@ exports.createRoom = async (req, res) => {
             return res.status(404).json({ message: 'Boarding House not found' });
         }
 
-        // Check if the price exists and belongs to the correct boarding house
-        const price = await Price.findOne({
-            where: {
-                id: priceId,
-                boardingHouseId: boardingHouseId // Ensure the price belongs to the specified boarding house
-            }
-        });
-        if (!price) {
-            return res.status(404).json({ message: 'Price not found or does not belong to the specified Boarding House' });
-        }
-
-        // Note: roomSize is now redundant in the Room model if priceId fully determines it.
-        // However, your model still includes it. We'll create the room with the provided size,
-        // but ideally, the frontend/logic should ensure roomSize matches the price's roomSize.
-        // For this controller, we'll proceed as is but keep the potential inconsistency in mind.
-
-        // Create the room using boardingHouseId and priceId
+        // Create the room - priceId is not included or is null/undefined
         const newRoom = await Room.create({
             boardingHouseId,
-            priceId, // Use the provided priceId
+            // priceId is NOT set here initially
             roomNumber,
-            roomSize: price.roomSize, // Still includes roomSize based on your model
+            roomSize,
             roomStatus,
             description,
-            createBy: req.user.username
+            createBy: req.user.username,
+            updateBy: req.user.username
         });
 
-        // Fetch the newly created room with its associations for the response
+        // Fetch the newly created room with its BoardingHouse for the response
+        // Price is NOT included here anymore
         const createdRoomWithAssociations = await Room.findByPk(newRoom.id, {
             include: [
-                {
-                    model: BoardingHouse,
-                    attributes: ['id', 'name', 'address']
-                },
-                {
-                    model: Price,
-                    attributes: ['id', 'roomSize', 'amount', 'name', 'description']
-                }
+                { model: BoardingHouse, attributes: ['id', 'name', 'address'] }
+                // Price is NOT included here
             ]
         });
 
-
-        // Return the created room object which now includes BoardingHouse and Price
-        // The previous requirement was to send room, BoardingHouse, and Price separately.
-        // With the new relation, including them directly in the room object is cleaner.
-        // We will return the created room object which has the included associations.
         res.status(200).json(createdRoomWithAssociations);
 
     } catch (error) {
