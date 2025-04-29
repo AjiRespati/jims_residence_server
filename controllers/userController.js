@@ -50,9 +50,9 @@ exports.updateUser = async (req, res) => {
 
         const { name, image, address, phone, email } = existingUser;
 
-        existingUser.level = level || existingUser.level;
+        existingUser.level = (level === undefined || level === null) ? existingUser.level : level;
         existingUser.status = status || existingUser.status;
-        existingUser.levelDesc = levelDescList[level || existingUser.level];
+        existingUser.levelDesc = levelDescList[(level === undefined || level === null) ? existingUser.level : level];
 
         await existingUser.save();
         logger.info(`User updated: ${id}`);
