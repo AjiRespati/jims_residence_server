@@ -311,11 +311,11 @@ exports.createTenant = async (req, res) => {
             startDate, // Start of tenancy / First billing period start
             dueDate, // Due date for the first invoice
             banishDate, // Optional
+            endDate,
             NIKImagePath, // Optional
             isNIKCopyDone, // Optional, defaults in model
-            tenancyStatus, // Optional, defaults in model
-            createBy,
-            updateBy,
+            tenancyStatus, // Optional, defaults in model   
+            roomStatus, // Optional, defaults in model
             // Fields for Price creation (mandatory here)
             priceAmount,
             priceName, // Optional
@@ -365,13 +365,19 @@ exports.createTenant = async (req, res) => {
             name: priceName || 'Base Rent', // Use provided name or default
             amount: priceAmount, // Use the provided amount
             description: priceDescription || `Base rent for ${priceRoomSize || 'Standard'} room`,
-            createBy: createBy,
-            updateBy: updateBy || createBy,
+            createBy: req.user.username,
+            updateBy: req.user.username,
             status: 'active' // New price is active by default
         }, { transaction: t });
 
         // 3. Update the Room to link it to the newly created Price
-        await room.update({ priceId: newPrice.id }, { transaction: t });
+        await room.update(
+            {
+                priceId: newPrice.id,
+                roomStatus: roomStatus || 'Terisi'
+            },
+            { transaction: t }
+        );
 
         // 4. Create Optional AdditionalPrice records linked to the Room
         let createdAdditionalPrices = [];
@@ -382,8 +388,8 @@ exports.createTenant = async (req, res) => {
                 name: ap.name || 'Unnamed Additional Price', // Assuming name is mandatory or defaults
                 description: ap.description,
                 status: ap.status || 'active', // Default status if not provided
-                createBy: ap.createBy || createBy,
-                updateBy: ap.updateBy || updateBy || createBy,
+                createBy: req.user.username,
+                updateBy: req.user.username,
             }));
             // Use bulkCreate for efficiency
             createdAdditionalPrices = await AdditionalPrice.bulkCreate(additionalPriceData, { transaction: t });
@@ -398,8 +404,8 @@ exports.createTenant = async (req, res) => {
                 name: oc.name || 'Unnamed Other Cost', // Assuming name is mandatory or defaults
                 description: oc.description,
                 status: oc.status || 'active', // Default status if not provided
-                createBy: oc.createBy || createBy,
-                updateBy: oc.updateBy || updateBy || createBy,
+                createBy: req.user.username,
+                updateBy: req.user.username,
             }));
             // Use bulkCreate for efficiency
             createdOtherCosts = await OtherCost.bulkCreate(otherCostData, { transaction: t });
@@ -415,11 +421,12 @@ exports.createTenant = async (req, res) => {
             startDate: tenantStartDate, // Use validated date
             dueDate: invoiceDueDate, // Tenant's contract due date / First invoice due date
             banishDate,
+            endDate,
             NIKImagePath,
             isNIKCopyDone,
             tenancyStatus: tenancyStatus || 'Active', // Use provided status or default
-            createBy,
-            updateBy: updateBy || createBy,
+            createBy: req.user.username,
+            updateBy: req.user.username,
         }, { transaction: t }); // Include the transaction
 
         // 7. Create the initial Invoice record for the new tenant
@@ -439,8 +446,8 @@ exports.createTenant = async (req, res) => {
             totalAmountPaid: 0, // Initially no amount paid
             status: 'Issued', // Or 'Unpaid' depending on your flow
             description: `Initial invoice for room ${room.roomNumber || roomId} period: ${tenantStartDate.toISOString().split('T')[0]} to ${invoicePeriodEnd.toISOString().split('T')[0]}`, // Example description
-            createBy: createBy,
-            updateBy: updateBy || createBy,
+            createBy: req.user.username,
+            updateBy: req.user.username,
         }, { transaction: t }); // Include the transaction
 
 
@@ -456,8 +463,8 @@ exports.createTenant = async (req, res) => {
                 amount: newPrice.amount,
                 description: newPrice.description || `Base rent for ${newPrice.roomSize} room`,
                 transactionType: 'debit',
-                createBy: createBy,
-                updateBy: updateBy || createBy,
+                createBy: req.user.username,
+                updateBy: req.user.username,
                 // Optional: costOriginType: 'price', costOriginId: newPrice.id
             };
             chargesToCreate.push(priceCharge);
@@ -473,8 +480,8 @@ exports.createTenant = async (req, res) => {
                     amount: ap.amount,
                     description: ap.description || 'Additional charge details',
                     transactionType: 'debit',
-                    createBy: createBy,
-                    updateBy: updateBy || createBy,
+                    createBy: req.user.username,
+                    updateBy: req.user.username,
                     // Optional: costOriginType: 'additionalPrice', costOriginId: ap.id
                 };
                 chargesToCreate.push(additionalCharge);
@@ -491,8 +498,8 @@ exports.createTenant = async (req, res) => {
                     amount: oc.amount,
                     description: oc.description || 'Other cost details',
                     transactionType: 'debit',
-                    createBy: createBy,
-                    updateBy: updateBy || createBy,
+                    createBy: req.user.username,
+                    updateBy: req.user.username,
                     // Optional: costOriginType: 'otherCost', costOriginId: oc.id
                 };
                 chargesToCreate.push(otherCharge);
