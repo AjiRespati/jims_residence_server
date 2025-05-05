@@ -32,7 +32,7 @@ const userRoutes = require("./routes/userRoutes");
 const base = "/service";
 
 app.get(`${base}/`, (req, res) => {
-  res.status(200).json({ message: "Residenza Service API is running!" });
+  res.status(200).json({ message: "Residenza 1.0.3 Service API is running!" });
 });
 
 // ✅ Serve Static Files (Fix the Image Error)
