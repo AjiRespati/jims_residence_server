@@ -8,7 +8,7 @@ const { sequelize } = require("./models");
 
 const app = express();
 
-const version = "1.0.3+1";
+const version = "1.0.5";
 
 // ✅ Middlewares
 app.use(cors());
@@ -30,6 +30,8 @@ const tenantRoutes = require("./routes/tenantRoutes");
 const invoiceRoutes = require("./routes/invoiceRoutes");
 const transactionRoutes = require("./routes/transactionRoutes");
 const userRoutes = require("./routes/userRoutes");
+const expenseRoutes = require("./routes/expenseRoutes");
+const reportRoutes = require("./routes/reportRoutes");
 
 const base = "/service";
 
@@ -54,6 +56,8 @@ app.use(`${base}/api/tenant`, tenantRoutes);
 app.use(`${base}/api/invoice`, invoiceRoutes);
 app.use(`${base}/api/transaction`, transactionRoutes);
 app.use(`${base}/api/user`, userRoutes);
+app.use(`${base}/api/expense`, expenseRoutes);
+app.use(`${base}/api/report`, reportRoutes);
 
 // ✅ Sync Database & Start Server
 const PORT = process.env.PORT || 5000;
