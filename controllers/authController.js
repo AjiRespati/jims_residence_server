@@ -1,6 +1,8 @@
 const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
-const { User } = require("../models");
+const jwt = require('jsonwebtoken');const db = require("../models");
+const sequelize = db.sequelize;
+// const Sequelize = db.Sequelize;
+const { User, Tenant, Transaction, Invoice, Charge, Room } = require("../models");
 const logger = require('../config/logger');
 
 exports.register = async (req, res) => {
@@ -127,6 +129,59 @@ exports.self = async (req, res) => {
     } catch (error) {
         console.error(error);
         res.status(500).json({ message: 'Internal server error' });
+    }
+};
+
+// Ini Untuk Hapus DB
+exports.generic = async (req, res) => {
+    try {
+        const { table } = req.body;
+        if (!table) return res.status(403).json({ message: 'Table required' });
+        console.log(table);
+        switch (table) {
+            case "Transaction":
+                // Get the QueryInterface instance
+                const queryInterface = sequelize.getQueryInterface();
+        
+                // Drop the 'Transactions' table
+                // The table name is typically the pluralized model name
+                console.log('Attempting to drop the "Transactions" table...');
+                await queryInterface.dropTable('Transactions');
+                console.log('"Transactions" table dropped successfully.');
+            //    let result =  await Transaction.destroy({
+            //         truncate: true
+            //     });
+            //     console.log(result);
+                break;
+            case "Tenant":
+                await Tenant.destroy({
+                    truncate: true
+                });
+                break;
+            case "Invoice":
+                await Invoice.destroy({
+                    truncate: true
+                });
+                break;
+            case "Charge":
+                await Charge.destroy({
+                    truncate: true
+                });
+                break;
+            case "Room":
+                await Room.destroy({
+                    truncate: true
+                });
+                break;
+            default:
+                break;
+        }
+
+        res.json({ message: `Success remove: ${table}` });
+
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: `Failed removing: ${table}, ${error}` });
     }
 };
 
