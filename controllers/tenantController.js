@@ -109,6 +109,7 @@ exports.getAllTenants = async (req, res) => {
                 'NIKNumber',
                 'tenancyStatus',
                 'startDate',
+                'endDate',
                 'dueDate',
                 'banishDate',
                 'createBy',

@@ -8,6 +8,8 @@ const { sequelize } = require("./models");
 
 const app = express();
 
+const version = "1.0.3+1";
+
 // ✅ Middlewares
 app.use(cors());
 app.use(helmet());
@@ -32,7 +34,7 @@ const userRoutes = require("./routes/userRoutes");
 const base = "/service";
 
 app.get(`${base}/`, (req, res) => {
-  res.status(200).json({ message: "Residenza 1.0.3 Service API is running!" });
+  res.status(200).json({ message: `✅ Residenza ${version} Service API is running!` });
 });
 
 // ✅ Serve Static Files (Fix the Image Error)
