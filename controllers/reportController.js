@@ -2,8 +2,9 @@ const db = require("../models");
 const sequelize = db.sequelize;
 const Sequelize = db.Sequelize;
 const { Op } = Sequelize;
+const logger = require('../config/logger');
 
-const { Invoice, Expense, BoardingHouse, Tenant, Room, Charge, Transaction} = require('../models');
+const { Invoice, Expense, BoardingHouse, Tenant, Room, Charge, Transaction } = require('../models');
 
 
 // Method to generate a monthly financial report
@@ -25,11 +26,11 @@ exports.getMonthlyFinancialReport = async (req, res) => {
         const yearInt = parseInt(year, 10);
 
         if (isNaN(monthInt) || monthInt < 1 || monthInt > 12 || isNaN(yearInt)) {
-             return res.status(400).json({
-                 success: false,
-                 message: 'Invalid month or year format. Month must be 1-12, Year must be a number.',
-                 data: null
-             });
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid month or year format. Month must be 1-12, Year must be a number.',
+                data: null
+            });
         }
 
         // Calculate the date range for the specified month
@@ -37,101 +38,189 @@ exports.getMonthlyFinancialReport = async (req, res) => {
         const endDate = new Date(yearInt, monthInt, 0); // Day 0 of the next month is the last day of the current month
         endDate.setHours(23, 59, 59, 999); // Include the entire end day
 
-        // Prepare the where clause for filtering by BoardingHouse if provided
-        const boardingHouseWhere = {};
+        // Prepare the base date filter for both queries
+        const dateFilter = {
+            [Op.between]: [startDate, endDate]
+        };
+
+        let reportDataList = []; // Initialize the list of report data objects
+
+        // --- Case 1: Filter by a specific Boarding House ---
         if (boardingHouseId) {
-            boardingHouseWhere.id = boardingHouseId;
-        }
+            // Validate if the specific boarding house exists
+            const boardingHouse = await BoardingHouse.findByPk(boardingHouseId);
+            if (!boardingHouse) {
+                return res.status(404).json({
+                    success: false,
+                    message: `Boarding House with ID ${boardingHouseId} not found.`,
+                    data: null
+                });
+            }
 
-        // --- Calculate Total Income from Tenant Billing ---
-        // We'll sum the totalAmountPaid for invoices issued within the specified month.
-        // This represents income received related to bills generated in that month.
-        // If you need income received *during* the month regardless of invoice date,
-        // you would sum Transaction amounts where transactionDate is in the range.
-        // Summing totalAmountPaid on invoices issued in the month is a common report type.
-
-        const incomeQueryOptions = {
-            attributes: [
-                [sequelize.fn('SUM', sequelize.col('totalAmountPaid')), 'totalMonthlyIncome']
-            ],
-            where: {
-                issueDate: { // Filter invoices by issue date within the month
-                    [Op.between]: [startDate, endDate]
+            // Calculate Total Income for the specific Boarding House
+            const totalIncomeResult = await Invoice.findOne({
+                attributes: [
+                    [sequelize.fn('SUM', sequelize.col('totalAmountPaid')), 'totalMonthlyIncome']
+                ],
+                where: {
+                    issueDate: dateFilter, // Apply date filter
                 },
-                 // Optional: Only sum income for invoices not in 'Draft' or 'Void' status?
-                 // status: { [Op.notIn]: ['Draft', 'Void'] }
-            },
-            include: [] // Include BoardingHouse for filtering
-        };
+                include: [
+                    {
+                        model: Room,
+                        attributes: [],
+                        required: true, // Require Room
+                        include: [
+                            {
+                                model: BoardingHouse,
+                                attributes: [],
+                                where: { id: boardingHouseId }, // Filter by specific BH ID
+                                required: true // Require BoardingHouse
+                            }
+                        ]
+                    }
+                ],
+                raw: true // 🔥 Add raw: true here to prevent implicit Invoice.id selection
+            });
 
-        // Add BoardingHouse filter to income query if applied
-        if (boardingHouseId) {
-             incomeQueryOptions.include.push({
-                 model: BoardingHouse,
-                 attributes: [], // Don't need BH attributes in the result
-                 where: boardingHouseWhere, // Apply the BH filter
-                 required: true // Require BoardingHouse association when filtering
-             });
-             // If filtering by BH, also filter the main Invoice query by roomId linked to that BH
-             // This is more explicit and might be needed if invoices can exist without rooms but with tenants
-             // incomeQueryOptions.where.roomId = {
-             //      [Op.in]: sequelize.literal(`(SELECT id FROM "Rooms" WHERE "boardingHouseId" = '${boardingHouseId}')`)
-             // };
-             // Or more simply, rely on the required include filtering:
-             // The required include ensures only invoices linked to rooms in the BH are considered.
+            // Calculate Total Expenses for the specific Boarding House
+            const totalExpenseResult = await Expense.findOne({
+                attributes: [
+                    [sequelize.fn('SUM', sequelize.col('amount')), 'totalMonthlyExpenses']
+                ],
+                where: {
+                    expenseDate: dateFilter, // Apply date filter
+                    boardingHouseId: boardingHouseId // Filter by specific BH ID
+                },
+                raw: true // 🔥 Add raw: true here to prevent implicit Expense.id selection
+            });
+
+            // Extract results (SUM returns null if no records match)
+            // Use optional chaining (?.) for safer access to properties on raw results
+            const totalMonthlyIncome = totalIncomeResult?.totalMonthlyIncome || 0;
+            const totalMonthlyExpenses = totalExpenseResult?.totalMonthlyExpenses || 0;
+
+            // Create a single report data object for this BH and add it to the list
+            reportDataList.push({
+                boardingHouseId: boardingHouse.id,
+                boardingHouseName: boardingHouse.name,
+                month: monthInt,
+                year: yearInt,
+                totalMonthlyIncome: parseFloat(totalMonthlyIncome),
+                totalMonthlyExpenses: parseFloat(totalMonthlyExpenses),
+                netProfitLoss: parseFloat(totalMonthlyIncome) - parseFloat(totalMonthlyExpenses)
+            });
+
+        }
+        // --- Case 2: Get Report for ALL Boarding Houses ---
+        else {
+            // Calculate Total Income grouped by Boarding House
+            const incomePerBoardingHouse = await Invoice.findAll({
+                attributes: [
+                    [sequelize.fn('SUM', sequelize.col('totalAmountPaid')), 'totalMonthlyIncome'],
+                    [sequelize.col('Room.BoardingHouse.id'), 'boardingHouseId'], // Get BH ID from nested association
+                    [sequelize.col('Room.BoardingHouse.name'), 'boardingHouseName'] // Get BH Name from nested association
+                ],
+                where: {
+                    issueDate: dateFilter, // Apply date filter
+                },
+                include: [
+                    {
+                        model: Room,
+                        attributes: [],
+                        required: true, // Require Room to join to BoardingHouse
+                        include: [
+                            {
+                                model: BoardingHouse,
+                                attributes: [], // Don't need BH attributes in the result, just for joining/grouping
+                                required: true // Require BoardingHouse
+                            }
+                        ]
+                    }
+                ],
+                group: ['Room.BoardingHouse.id', 'Room.BoardingHouse.name'], // Group by BH ID and Name
+                raw: true // Return raw data for easier mapping
+            });
+
+            // Calculate Total Expenses grouped by Boarding House
+            const expensesPerBoardingHouse = await Expense.findAll({
+                attributes: [
+                    [sequelize.fn('SUM', sequelize.col('amount')), 'totalMonthlyExpenses'],
+                    'boardingHouseId' // Group by BH ID directly
+                ],
+                where: {
+                    expenseDate: dateFilter, // Apply date filter
+                },
+                group: ['Expense.boardingHouseId'], // Group by BH ID
+                raw: true // Return raw data for easier mapping
+            });
+
+            // Map and merge income and expense results by boardingHouseId
+            const expenseMap = expensesPerBoardingHouse.reduce((map, expense) => {
+                map[expense.boardingHouseId] = parseFloat(expense.totalMonthlyExpenses) || 0;
+                return map;
+            }, {});
+
+            reportDataList = incomePerBoardingHouse.map(income => {
+                const boardingHouseId = income.boardingHouseId;
+                const totalMonthlyIncome = parseFloat(income.totalMonthlyIncome) || 0;
+                const totalMonthlyExpenses = expenseMap[boardingHouseId] || 0; // Get expenses for this BH, default to 0
+
+                return {
+                    boardingHouseId: boardingHouseId,
+                    boardingHouseName: income.boardingHouseName,
+                    month: monthInt,
+                    year: yearInt,
+                    totalMonthlyIncome: totalMonthlyIncome,
+                    totalMonthlyExpenses: totalMonthlyExpenses,
+                    netProfitLoss: totalMonthlyIncome - totalMonthlyExpenses
+                };
+            });
+
+            // Optional: Include boarding houses that had expenses but no income in the period
+            const allBoardingHouses = await BoardingHouse.findAll({ attributes: ['id', 'name'], raw: true });
+            const incomeBoardingHouseIds = new Set(reportDataList.map(item => item.boardingHouseId));
+
+            allBoardingHouses.forEach(bh => {
+                const totalMonthlyExpenses = expenseMap[bh.id] || 0;
+                // Only add if it had expenses but no income record in the incomePerBoardingHouse result
+                if (!incomeBoardingHouseIds.has(bh.id) && totalMonthlyExpenses > 0) {
+                    reportDataList.push({
+                        boardingHouseId: bh.id,
+                        boardingHouseName: bh.name,
+                        month: monthInt,
+                        year: yearInt,
+                        totalMonthlyIncome: 0, // No income for this BH in this period
+                        totalMonthlyExpenses: totalMonthlyExpenses,
+                        netProfitLoss: -totalMonthlyExpenses
+                    });
+                }
+                // Optional: Include boarding houses with 0 income and 0 expense if desired
+                // else if (!incomeBoardingHouseIds.has(bh.id) && totalMonthlyExpenses === 0) {
+                //      reportDataList.push({
+                //         boardingHouseId: bh.id,
+                //         boardingHouseName: bh.name,
+                //         month: monthInt,
+                //         year: yearInt,
+                //         totalMonthlyIncome: 0,
+                //         totalMonthlyExpenses: 0,
+                //         netProfitLoss: 0
+                //      });
+                // }
+            });
+
+            // Sort the list by Boarding House Name or ID if desired
+            reportDataList.sort((a, b) => a.boardingHouseName.localeCompare(b.boardingHouseName));
+
         }
 
-
-        const totalIncomeResult = await Invoice.findOne(incomeQueryOptions);
-
-
-        // --- Calculate Total Expenses ---
-        // Sum the amount of Expense records where expenseDate falls within the specified month.
-
-        const expenseQueryOptions = {
-             attributes: [
-                 [sequelize.fn('SUM', sequelize.col('amount')), 'totalMonthlyExpenses']
-             ],
-             where: {
-                 expenseDate: { // Filter expenses by expense date within the month
-                     [Op.between]: [startDate, endDate]
-                 }
-             },
-             include: [] // Include BoardingHouse for filtering
-        };
-
-        // Add BoardingHouse filter to expense query if applied
-        if (boardingHouseId) {
-             expenseQueryOptions.include.push({
-                 model: BoardingHouse,
-                 attributes: [], // Don't need BH attributes in the result
-                 where: boardingHouseWhere, // Apply the BH filter
-                 required: true // Require BoardingHouse association when filtering
-             });
-             // The required include ensures only expenses linked to the BH are considered.
-        }
-
-        const totalExpenseResult = await Expense.findOne(expenseQueryOptions);
-
-
-        // Extract the results (SUM returns null if no records match)
-        const totalMonthlyIncome = totalIncomeResult ? totalIncomeResult.get('totalMonthlyIncome') || 0 : 0;
-        const totalMonthlyExpenses = totalExpenseResult ? totalExpenseResult.get('totalMonthlyExpenses') || 0 : 0;
-
-        // Prepare the response data
-        const reportData = {
-            month: monthInt,
-            year: yearInt,
-            boardingHouseId: boardingHouseId || 'All',
-            totalMonthlyIncome: parseFloat(totalMonthlyIncome), // Ensure it's a number
-            totalMonthlyExpenses: parseFloat(totalMonthlyExpenses), // Ensure it's a number
-            netProfitLoss: parseFloat(totalMonthlyIncome) - parseFloat(totalMonthlyExpenses) // Calculate net
-        };
 
         res.status(200).json({
             success: true,
-            message: `Monthly financial report for ${monthInt}/${yearInt}${boardingHouseId ? ` for Boarding House ID: ${boardingHouseId}` : ''} generated successfully`,
-            data: reportData
+            message: boardingHouseId ?
+                `Monthly financial report for Boarding House ID: ${boardingHouseId} for ${monthInt}/${yearInt} generated successfully` :
+                `Monthly financial report for all boarding houses for ${monthInt}/${yearInt} generated successfully`,
+            data: reportDataList // Return the list of report data objects
         });
 
     } catch (error) {
@@ -147,8 +236,8 @@ exports.getFinancialOverview = async (req, res) => {
         // Extract filter parameters from query string
         const { boardingHouseId, dateFrom, dateTo } = req.query;
 
-        // --- Prepare Date Filter ---
-        const dateWhere = {};
+        // --- Prepare Date Filter Conditions ---
+        const dateConditions = {}; // Object to hold date conditions using Op operators
         let isDateFilterApplied = false;
 
         if (dateFrom && dateTo) {
@@ -156,136 +245,150 @@ exports.getFinancialOverview = async (req, res) => {
             const toDate = new Date(dateTo);
 
             if (!isNaN(fromDate.getTime()) && !isNaN(toDate.getTime())) {
-                 // Adjust toDate to include the entire end day
+                // Adjust toDate to include the entire end day
                 toDate.setHours(23, 59, 59, 999);
 
-                dateWhere[Op.between] = [fromDate, toDate];
+                dateConditions[Op.between] = [fromDate, toDate];
                 isDateFilterApplied = true;
             } else {
-                 // Handle invalid date formats
-                 return res.status(400).json({
-                     success: false,
-                     message: 'Invalid date format for dateFrom or dateTo. Use YYYY-MM-DD.',
-                     data: null
-                 });
+                // Handle invalid date formats
+                return res.status(400).json({
+                    success: false,
+                    message: 'Invalid date format for dateFrom or dateTo. UseYYYY-MM-DD.',
+                    data: null
+                });
             }
         } else if (dateFrom) {
-             // Handle only dateFrom provided
-             const fromDate = new Date(dateFrom);
-             if (!isNaN(fromDate.getTime())) {
-                 dateWhere[Op.gte] = fromDate;
-                 isDateFilterApplied = true;
-             } else {
-                 return res.status(400).json({
-                     success: false,
-                     message: 'Invalid date format for dateFrom. Use YYYY-MM-DD.',
-                     data: null
-                 });
-             }
+            // Handle only dateFrom provided
+            const fromDate = new Date(dateFrom);
+            if (!isNaN(fromDate.getTime())) {
+                dateConditions[Op.gte] = fromDate;
+                isDateFilterApplied = true;
+            } else {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Invalid date format for dateFrom. UseYYYY-MM-DD.',
+                    data: null
+                });
+            }
         } else if (dateTo) {
-             // Handle only dateTo provided
-             const toDate = new Date(dateTo);
-             if (!isNaN(toDate.getTime())) {
-                 toDate.setHours(23, 59, 59, 999); // Include the entire end day
-                 dateWhere[Op.lte] = toDate;
-                 isDateFilterApplied = true;
-             } else {
-                 return res.status(400).json({
-                     success: false,
-                     message: 'Invalid date format for dateTo. Use YYYY-MM-DD.',
-                     data: null
-                 });
-             }
+            // Handle only dateTo provided
+            const toDate = new Date(dateTo);
+            if (!isNaN(toDate.getTime())) {
+                toDate.setHours(23, 59, 59, 999); // Include the entire end day
+                dateConditions[Op.lte] = toDate;
+                isDateFilterApplied = true;
+            } else {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Invalid date format for dateTo. UseYYYY-MM-DD.',
+                    data: null
+                });
+            }
         }
 
-        // --- Prepare Boarding House Filter for Includes ---
-        const boardingHouseWhere = {};
-        let isBoardingHouseFilterApplied = false;
-
+        // --- Prepare Boarding House Filter Conditions ---
+        const boardingHouseConditions = {}; // Object to hold BH ID condition
         if (boardingHouseId) {
-            boardingHouseWhere.id = boardingHouseId;
-            isBoardingHouseFilterApplied = true;
+            boardingHouseConditions.id = boardingHouseId;
         }
-
-        // Define the BoardingHouse include configuration for filtering
-        const boardingHouseIncludeConfig = {
-            model: BoardingHouse,
-            attributes: ['id', 'name'], // Include basic BH attributes
-            where: boardingHouseWhere, // Apply where clause directly here
-            required: isBoardingHouseFilterApplied // Require BoardingHouse if filtering by it
-        };
+        let isBoardingHouseFilterApplied = Object.keys(boardingHouseConditions).length > 0;
 
 
         // --- Fetch Filtered Invoices ---
         // Filter invoices by issueDate and optionally by BoardingHouse via Room include
-        const invoiceWhere = { ...dateWhere }; // Apply date filter to invoices issueDate
-        // Note: BoardingHouse filter for Invoices is applied via the Room -> BoardingHouse include's 'where' and 'required'
+        const invoiceWhere = isDateFilterApplied ? { issueDate: dateConditions } : undefined;
+
+        // The BoardingHouse include where clause only contains BH ID filter or is undefined
+        const boardingHouseIncludeWhere = isBoardingHouseFilterApplied ? boardingHouseConditions : undefined;
+
+        // Configure the Room include with nested BoardingHouse include for filtering
+        const roomIncludeConfig = {
+            model: Room,
+            attributes: ['id', 'roomNumber'], // Include some room info
+            include: [
+                {
+                    model: BoardingHouse,
+                    attributes: ['id', 'name'], // Include basic BH attributes
+                    where: boardingHouseIncludeWhere, // Apply BH where clause (or undefined)
+                    required: isBoardingHouseFilterApplied // Require BoardingHouse if filtering by it
+                }
+            ],
+            required: isBoardingHouseFilterApplied // Require Room if filtering by BH
+        };
 
 
         const invoices = await Invoice.findAll({
-            where: invoiceWhere, // Apply date filter
+            where: invoiceWhere, // Apply date filter (or undefined if no date filter)
             attributes: [ // Select relevant Invoice attributes
                 'id', 'periodStart', 'periodEnd', 'issueDate', 'dueDate',
                 'totalAmountDue', 'totalAmountPaid', 'status', 'description',
                 'createBy', 'updateBy', 'createdAt', 'updatedAt'
             ],
             include: [
-                // Include Room -> BoardingHouse for filtering
-                {
-                    model: Room,
-                    attributes: ['id', 'roomNumber'], // Include some room info
-                    include: [boardingHouseIncludeConfig], // Nested BH include for filtering
-                    required: isBoardingHouseFilterApplied // Require Room if filtering by BH
-                },
-                // Include other relevant Invoice associations for detail
+                // Include the Room -> BoardingHouse path for filtering and nesting
+                roomIncludeConfig,
+                // Include other relevant Invoice associations for detail (will be nested)
                 { model: Tenant, attributes: ['id', 'name', 'phone'], required: false },
-                { model: Charge, as: 'Charges', attributes: ['id', 'name', 'amount', 'transactionType'], required: false },
-                { model: Transaction, as: 'Transactions', attributes: ['id', 'amount', 'transactionDate', 'method'], required: false }
+                { model: Charge, as: 'Charges', attributes: ['id', 'name', 'amount', 'transactionType', 'description'], required: false }, // Include description for Charges
+                { model: Transaction, as: 'Transactions', attributes: ['id', 'amount', 'transactionDate', 'method', 'description', 'transactionProofPath'], required: false } // Include more details for Transactions
             ],
-            order: [['issueDate', 'DESC']] // Default order
+            order: [['issueDate', 'DESC']], // Default order
+            // 🔥 Remove raw: true to get nested model instances
+            // raw: true
         });
 
 
         // --- Fetch Filtered Expenses ---
         // Filter expenses by expenseDate and optionally by BoardingHouse directly
-        const expenseWhere = { ...dateWhere }; // Apply date filter to expenses expenseDate
-
-        if (boardingHouseId) {
-             expenseWhere.boardingHouseId = boardingHouseId; // 🔥 Apply BH filter directly to Expense model
+        const expenseWhere = {};
+        if (isDateFilterApplied) {
+            expenseWhere.expenseDate = dateConditions;
         }
+        if (isBoardingHouseFilterApplied) {
+            expenseWhere.boardingHouseId = boardingHouseId; // Direct filter on Expense model
+        }
+        // Use undefined if no filters were applied at all
+        const finalExpenseWhere = Object.keys(expenseWhere).length > 0 ? expenseWhere : undefined;
+
 
         const expenses = await Expense.findAll({
-            where: expenseWhere, // Apply date and BH filters
+            where: finalExpenseWhere, // Apply combined filters (or undefined)
             attributes: [ // Select relevant Expense attributes
                 'id', 'boardingHouseId', 'category', 'name', 'amount', 'expenseDate',
-                'paymentMethod', 'description', 'createBy', 'updateBy', 'createdAt', 'updatedAt'
+                'paymentMethod', 'proofPath', 'description', 'createBy', 'updateBy', 'createdAt', 'updatedAt'
             ],
             include: [
-                { model: BoardingHouse, attributes: ['id', 'name'], required: false } // Include BH for context (optional join)
+                { model: BoardingHouse, attributes: ['id', 'name', 'address'], required: false } // Include BH for context (optional join)
             ],
-            order: [['expenseDate', 'DESC']] // Default order
+            order: [['expenseDate', 'DESC']], // Default order
+            // 🔥 Remove raw: true to get nested model instances
+            // raw: true
         });
 
 
         // --- Prepare Response Data ---
+        // When raw: false, Sequelize handles the nesting automatically.
+        // We convert to JSON explicitly if needed, but Sequelize often does this for res.json()
         const responseData = {
             filters: {
                 boardingHouseId: boardingHouseId || 'All',
                 dateFrom: dateFrom || 'Beginning',
                 dateTo: dateTo || 'End'
             },
-            invoices: invoices, // Array of filtered Invoice objects
-            expenses: expenses // Array of filtered Expense objects
+            // Convert results to plain JSON objects for the response
+            invoices: invoices.map(invoice => invoice.toJSON()),
+            expenses: expenses.map(expense => expense.toJSON())
         };
 
         let message = 'Financial overview retrieved successfully';
-         if (isBoardingHouseFilterApplied && isDateFilterApplied) {
-             message = `Financial overview retrieved successfully for Boarding House ID: ${boardingHouseId} and date range: ${dateFrom} to ${dateTo}`;
-         } else if (isBoardingHouseFilterApplied) {
-             message = `Financial overview retrieved successfully for Boarding House ID: ${boardingHouseId}`;
-         } else if (isDateFilterApplied) {
-             message = `Financial overview retrieved successfully for date range: ${dateFrom} to ${dateTo}`;
-         }
+        if (isBoardingHouseFilterApplied && isDateFilterApplied) {
+            message = `Financial overview retrieved successfully for Boarding House ID: ${boardingHouseId} and date range: ${dateFrom} to ${dateTo}`;
+        } else if (isBoardingHouseFilterApplied) {
+            message = `Financial overview retrieved successfully for Boarding House ID: ${boardingHouseId}`;
+        } else if (isDateFilterApplied) {
+            message = `Financial overview retrieved successfully for date range: ${dateFrom} to ${dateTo}`;
+        }
 
 
         res.status(200).json({
