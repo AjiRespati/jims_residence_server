@@ -52,15 +52,13 @@ exports.createExpense = async (req, res) => {
             expenseDate,
             paymentMethod,
             description, // Optional
-            createBy,
-            updateBy // Optional
             // proofPath is assumed to be set by middleware on req.proofPath
         } = req.body;
 
         // Validate required fields
-        if (!boardingHouseId || !name || amount === undefined || amount === null || !expenseDate || !paymentMethod || !createBy) {
+        if (!boardingHouseId || !name || amount === undefined || amount === null || !expenseDate || !paymentMethod) {
             // await t.rollback();
-            return res.status(400).json({ message: 'Required expense fields are missing: boardingHouseId, name, amount, expenseDate, paymentMethod, createBy' });
+            return res.status(400).json({ message: 'Required expense fields are missing: boardingHouseId, name, amount, expenseDate, paymentMethod' });
         }
 
         // Ensure amount is a positive number
@@ -94,8 +92,8 @@ exports.createExpense = async (req, res) => {
             paymentMethod: paymentMethod,
             proofPath: req.proofPath || null, // Get path from middleware or set null
             description: description,
-            createBy: createBy,
-            updateBy: updateBy || createBy,
+            createBy: req.user.username,
+            updateBy: req.user.username,
         }); // , { transaction: t }
 
 
@@ -112,8 +110,7 @@ exports.createExpense = async (req, res) => {
             ]
         });
 
-
-        res.status(201).json({
+        res.status(200).json({
             success: true,
             message: 'Expense recorded successfully',
             data: expenseWithDetails // Return the created expense with details
