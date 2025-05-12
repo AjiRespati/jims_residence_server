@@ -5,6 +5,7 @@ const helmet = require("helmet");
 const morgan = require("morgan");
 const logger = require("./config/logger");
 const { sequelize } = require("./models");
+const { startBillingTask } = require('./tasks/billingTasks'); // Adjust the path
 
 const app = express();
 
@@ -36,7 +37,7 @@ const reportRoutes = require("./routes/reportRoutes");
 const base = "/service";
 
 app.get(`${base}/`, (req, res) => {
-  res.status(200).json({ message: `✅ Residenza ${version} Service API is running!` });
+    res.status(200).json({ message: `✅ Residenza ${version} Service API is running!` });
 });
 
 // ✅ Serve Static Files (Fix the Image Error)
@@ -65,6 +66,10 @@ const PORT = process.env.PORT || 5000;
 sequelize.sync({ alter: true })
     .then(() => {
         logger.info("✅ Database synchronized successfully.");
+
+        startBillingTask();
+        logger.info('🔥 Scheduled billing task started.');
+
         app.listen(PORT, () => logger.info(`🚀 Server running on port ${PORT}`));
     })
     .catch((err) => {
