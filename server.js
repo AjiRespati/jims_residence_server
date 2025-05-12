@@ -8,7 +8,8 @@ const { sequelize } = require("./models");
 
 const app = express();
 
-const version = "1.0.3+1";
+//TODO: Update the version before deploy.
+const version = "1.0.5";
 
 // ✅ Middlewares
 app.use(cors());
