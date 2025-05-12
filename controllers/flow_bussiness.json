@@ -1,0 +1,32 @@
+{
+    "daftarkanTenant": [
+        {
+            "roomId": "5625e4a7-6954-4bc0-bb8d-1e40e001da9a",
+            "name": "Tuhan",
+            "phone": "088877778888",
+            "NIKNumber": "888877778888",
+            "startDate": "2025-05-01T00:00:00.000",
+            "dueDate": "2025-05-08T00:00:00.000",
+            "banishDate": "2025-05-15T00:00:00.000",
+            "endDate": "2025-05-31T00:00:00.000",
+            "NIKImagePath": null,
+            "isNIKCopyDone": false,
+            "tenancyStatus": "Active",
+            "roomStatus": "",
+            "paymentDate": null,
+            "paymentStatus": "unpaid",
+            "priceAmount": 1000000,
+            "priceName": "",
+            "priceDescription": null,
+            "priceRoomSize": null,
+            "additionalPrices": [],
+            "otherCosts": []
+        },
+        {
+            "cek rommId":"apakah room ada di db",
+            "daftarkan price baru":"setiap tenant baru akan memiliki price terbaru",
+            "perubahan harga": "update harga berarti membuat price beru, price lama inactive (blm implement)",
+            "daftarkan tambahan harga bila ada": "sama dengan price, membuat harga baru. update sama dengan buat baru."
+        }
+    ]
+}

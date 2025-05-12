@@ -78,7 +78,7 @@ exports.deleteUser = async (req, res) => {
 };
 
 const levelDescList = [
-    "Penjaga Kost",
+    "Petugas Kost",
     "Admin",
     "Pemilik",
 ];

@@ -10,6 +10,8 @@ module.exports = (sequelize, DataTypes) => {
     BoardingHouse.associate = (models) => {
         BoardingHouse.hasMany(models.Room, { foreignKey: "boardingHouseId" });
         BoardingHouse.hasMany(models.Price, { foreignKey: "boardingHouseId" });
+        // Add the association to the new Expense model:
+        BoardingHouse.hasMany(models.Expense, { foreignKey: "boardingHouseId", as: 'Expenses', onDelete: 'SET NULL' }); // Use SET NULL or CASCADE
     };
 
     return BoardingHouse;
