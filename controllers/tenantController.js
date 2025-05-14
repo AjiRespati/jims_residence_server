@@ -299,6 +299,7 @@ exports.getTenantById = async (req, res) => {
     }
 };
 
+// Method to create a new tenant (MODIFIED - Calculates first invoice periodEnd)
 exports.createTenant = async (req, res) => {
     // Start a transaction
     const t = await sequelize.transaction();
@@ -310,13 +311,11 @@ exports.createTenant = async (req, res) => {
             phone,
             NIKNumber,
             startDate, // Start of tenancy / First billing period start
-            dueDate, // Due date for the first invoice
-            banishDate, // Optional
-            endDate,
+            dueDate, // Due date for the first invoice (user-provided)
+            banishDate, // Optional (user-provided for first invoice)
             NIKImagePath, // Optional
             isNIKCopyDone, // Optional, defaults in model
-            tenancyStatus, // Optional, defaults in model   
-            roomStatus, // Optional, defaults in model
+            tenancyStatus, // Optional, defaults in model
             // Fields for Price creation (mandatory here)
             priceAmount,
             priceName, // Optional
@@ -341,13 +340,22 @@ exports.createTenant = async (req, res) => {
 
         // Ensure startDate and dueDate are valid dates
         const tenantStartDate = new Date(startDate);
-        const invoiceDueDate = new Date(dueDate);
+        const invoiceDueDate = new Date(dueDate); // Use user-provided due date for the first invoice
 
         if (isNaN(tenantStartDate.getTime()) || isNaN(invoiceDueDate.getTime())) {
             await t.rollback();
             return res.status(400).json({ message: 'Invalid startDate or dueDate format' });
         }
 
+        // Optional: Validate banishDate format if provided
+        let invoiceBanishDate = null;
+        if (banishDate) {
+            invoiceBanishDate = new Date(banishDate);
+            if (isNaN(invoiceBanishDate.getTime())) {
+                await t.rollback();
+                return res.status(400).json({ message: 'Invalid banishDate format' });
+            }
+        }
 
         // 1. Fetch the Room within the transaction
         // We don't fetch AdditionalPrices or OtherCosts here because we are creating new ones if provided
@@ -363,25 +371,19 @@ exports.createTenant = async (req, res) => {
         const newPrice = await Price.create({
             boardingHouseId: room.boardingHouseId, // Get BH ID from the Room
             roomSize: priceRoomSize || 'Standard', // Use provided size or default
-            name: priceName || 'Base Rent', // Use provided name or default
+            name: priceName || 'Sewa kamar', // Use provided name or default
             amount: priceAmount, // Use the provided amount
-            description: priceDescription || `Base rent for ${priceRoomSize || 'Standard'} room`,
+            description: priceDescription || `Sewa kamar ${room.roomNumber || ''}`,
             createBy: req.user.username,
             updateBy: req.user.username,
             status: 'active' // New price is active by default
         }, { transaction: t });
 
         // 3. Update the Room to link it to the newly created Price
-        await room.update(
-            {
-                priceId: newPrice.id,
-                roomStatus: roomStatus || 'Terisi'
-            },
-            { transaction: t }
-        );
+        await room.update({ priceId: newPrice.id, updateBy: req.user.username }, { transaction: t });
 
         // 4. Create Optional AdditionalPrice records linked to the Room
-        let createdAdditionalPrices = [];
+        const createdAdditionalPrices = [];
         if (additionalPrices && Array.isArray(additionalPrices) && additionalPrices.length > 0) {
             const additionalPriceData = additionalPrices.map(ap => ({
                 roomId: room.id, // Link to the Room
@@ -397,7 +399,7 @@ exports.createTenant = async (req, res) => {
         }
 
         // 5. Create Optional OtherCost records linked to the Room
-        let createdOtherCosts = [];
+        const createdOtherCosts = [];
         if (otherCosts && Array.isArray(otherCosts) && otherCosts.length > 0) {
             const otherCostData = otherCosts.map(oc => ({
                 roomId: room.id, // Link to the Room
@@ -420,9 +422,8 @@ exports.createTenant = async (req, res) => {
             phone,
             NIKNumber,
             startDate: tenantStartDate, // Use validated date
-            dueDate: invoiceDueDate, // Tenant's contract due date / First invoice due date
-            banishDate,
-            endDate,
+            dueDate: invoiceDueDate, // Tenant's contract due date (can be different from invoice due date)
+            banishDate, // Tenant's contract banish date (can be different from invoice banish date)
             NIKImagePath,
             isNIKCopyDone,
             tenancyStatus: tenancyStatus || 'Active', // Use provided status or default
@@ -431,22 +432,31 @@ exports.createTenant = async (req, res) => {
         }, { transaction: t }); // Include the transaction
 
         // 7. Create the initial Invoice record for the new tenant
-        // Calculate billing period dates (e.g., one month from start date)
-        const invoicePeriodEnd = new Date(tenantStartDate);
-        invoicePeriodEnd.setMonth(invoicePeriodEnd.getMonth() + 1);
-        invoicePeriodEnd.setDate(invoicePeriodEnd.getDate() - 1); // End date is the day before the next month starts
+        // Calculate billing period dates based on tenantStartDate
+        const firstInvoicePeriodStart = tenantStartDate;
+
+        // 🔥 Calculate firstInvoicePeriodEnd: startDate + 1 month, adjust to last day if startDate is last day of month
+        let firstInvoicePeriodEnd = addMonths(firstInvoicePeriodStart, 1);
+        if (isLastDayOfMonth(firstInvoicePeriodStart)) {
+            firstInvoicePeriodEnd = endOfMonth(firstInvoicePeriodEnd);
+        } else {
+            // If startDate is not the last day, subtract one day from the calculated date
+            // e.g., Jan 15 -> addMonths(1) -> Feb 15. Subtract 1 day -> Feb 14.
+            firstInvoicePeriodEnd = subDays(firstInvoicePeriodEnd, 1);
+        }
 
         const firstInvoice = await Invoice.create({
             tenantId: newTenant.id,
             roomId: room.id, // Link to the room
-            periodStart: tenantStartDate, // Billing starts on tenancy start date
-            periodEnd: invoicePeriodEnd, // Billing ends one month later
-            issueDate: new Date(), // Invoice issued today
-            dueDate: invoiceDueDate, // Use tenant's provided dueDate for the first bill
+            periodStart: firstInvoicePeriodStart, // Billing starts on tenancy start date
+            periodEnd: firstInvoicePeriodEnd, // Calculated period end
+            issueDate: tenantStartDate, // Invoice issued on tenancy start date
+            dueDate: invoiceDueDate, // Use user-provided due date for the first bill
+            banishDate: invoiceBanishDate, // Use user-provided banish date for the first bill
             totalAmountDue: 0, // Will calculate and update later
             totalAmountPaid: 0, // Initially no amount paid
             status: 'Issued', // Or 'Unpaid' depending on your flow
-            description: `Initial invoice for room ${room.roomNumber || roomId} period: ${tenantStartDate.toISOString().split('T')[0]} to ${invoicePeriodEnd.toISOString().split('T')[0]}`, // Example description
+            description: `Initial invoice for room ${room.roomNumber || roomId} period: ${firstInvoicePeriodStart.toISOString().split('T')[0]} to ${firstInvoicePeriodEnd.toISOString().split('T')[0]}`, // Example description
             createBy: req.user.username,
             updateBy: req.user.username,
         }, { transaction: t }); // Include the transaction
@@ -462,7 +472,7 @@ exports.createTenant = async (req, res) => {
                 invoiceId: firstInvoice.id, // Link to the new Invoice
                 name: newPrice.name,
                 amount: newPrice.amount,
-                description: newPrice.description || `Base rent for ${newPrice.roomSize} room`,
+                description: newPrice.description || `Sewa kamar`,
                 transactionType: 'debit',
                 createBy: req.user.username,
                 updateBy: req.user.username,
@@ -536,13 +546,13 @@ exports.createTenant = async (req, res) => {
                             model: Price,
                             attributes: ['id', 'name', 'amount', 'roomSize', 'description', 'status']
                         },
-                        { // 🔥 Include the NEWLY CREATED AdditionalPrices linked via Room
+                        { // Include the NEWLY CREATED AdditionalPrices linked via Room
                             model: AdditionalPrice,
                             attributes: ['id', 'name', 'amount', 'description', 'status'],
                             where: { status: 'active' }, // Only include active ones
                             required: false // Use LEFT JOIN
                         },
-                        { // 🔥 Include the NEWLY CREATED OtherCosts linked via Room
+                        { // Include the NEWLY CREATED OtherCosts linked via Room
                             model: OtherCost,
                             attributes: ['id', 'name', 'amount', 'description', 'status'],
                             where: { status: 'active' }, // Only include active ones
@@ -552,7 +562,7 @@ exports.createTenant = async (req, res) => {
                 },
                 {
                     model: Invoice, // Include the associated Invoices
-                    attributes: ['id', 'periodStart', 'periodEnd', 'issueDate', 'dueDate', 'totalAmountDue', 'totalAmountPaid', 'status', 'description', 'createBy'],
+                    attributes: ['id', 'periodStart', 'periodEnd', 'issueDate', 'dueDate', 'banishDate', 'totalAmountDue', 'totalAmountPaid', 'status', 'description', 'createBy'], // Include banishDate
                     include: [
                         {
                             model: Charge, // Include the Charges within the Invoice
@@ -565,24 +575,14 @@ exports.createTenant = async (req, res) => {
         });
 
 
-        res.status(200).json(tenantWithDetails); // Return the created tenant with details, first invoice, and the new price/costs
+        res.status(201).json(tenantWithDetails); // Return the created tenant with details, first invoice, and the new price/costs
 
     } catch (error) {
+        // If any error occurs, rollback the transaction
+        await t.rollback();
         logger.error(`❌ createTenant error: ${error.message}`);
         logger.error(error.stack);
-        // Handle Sequelize validation errors specifically
-        if (error.name === 'SequelizeValidationError') {
-            return res.status(400).json({
-                success: false,
-                message: 'Validation error creating room',
-                error: error.errors.map(err => err.message)
-            });
-        }
-        res.status(500).json({
-            success: false,
-            message: 'Error creating room',
-            error: error.message
-        });
+        res.status(500).json({ message: 'Internal server error', error: error.message });
     }
 };
 

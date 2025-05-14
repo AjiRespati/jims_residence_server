@@ -6,7 +6,6 @@ const logger = require('../config/logger');
 
 const { Invoice, Expense, BoardingHouse, Tenant, Room, Charge, Transaction } = require('../models');
 
-
 // Method to generate a monthly financial report
 exports.getMonthlyFinancialReport = async (req, res) => {
     try {
@@ -330,12 +329,11 @@ exports.getFinancialOverview = async (req, res) => {
                 roomIncludeConfig,
                 // Include other relevant Invoice associations for detail (will be nested)
                 { model: Tenant, attributes: ['id', 'name', 'phone'], required: false },
-                { model: Charge, as: 'Charges', attributes: ['id', 'name', 'amount', 'transactionType', 'description'], required: false }, // Include description for Charges
+                { model: Charge, as: 'Charges', attributes: ['id', 'name', 'amount', 'description', 'transactionType'], required: false }, // Include description for Charges
                 { model: Transaction, as: 'Transactions', attributes: ['id', 'amount', 'transactionDate', 'method', 'description', 'transactionProofPath'], required: false } // Include more details for Transactions
             ],
             order: [['issueDate', 'DESC']], // Default order
-            // 🔥 Remove raw: true to get nested model instances
-            // raw: true
+            // raw: true // Keep raw: true for now
         });
 
 
@@ -362,9 +360,13 @@ exports.getFinancialOverview = async (req, res) => {
                 { model: BoardingHouse, attributes: ['id', 'name', 'address'], required: false } // Include BH for context (optional join)
             ],
             order: [['expenseDate', 'DESC']], // Default order
-            // 🔥 Remove raw: true to get nested model instances
-            // raw: true
+            // raw: true // Keep raw: true for now
         });
+
+
+        // --- Calculate Totals ---
+        const totalInvoicesPaid = invoices.reduce((sum, invoice) => sum + (invoice.totalAmountPaid || 0), 0);
+        const totalExpensesAmount = expenses.reduce((sum, expense) => sum + (expense.amount || 0), 0);
 
 
         // --- Prepare Response Data ---
@@ -376,9 +378,15 @@ exports.getFinancialOverview = async (req, res) => {
                 dateFrom: dateFrom || 'Beginning',
                 dateTo: dateTo || 'End'
             },
-            // Convert results to plain JSON objects for the response
-            invoices: invoices.map(invoice => invoice.toJSON()),
-            expenses: expenses.map(expense => expense.toJSON())
+            invoices: invoices.map(invoice => invoice.toJSON()), // Convert to plain JSON
+            expenses: expenses.map(expense => expense.toJSON()), // Convert to plain JSON
+            totalInvoicesPaid: parseFloat(totalInvoicesPaid.toFixed(2)), // Format to 2 decimal places and ensure number
+            totalExpensesAmount: parseFloat(totalExpensesAmount.toFixed(2)) // Format to 2 decimal places and ensure number
+            // totals: { // 🔥 Add totals here
+            //     totalInvoicesPaid: parseFloat(totalInvoicesPaid.toFixed(2)), // Format to 2 decimal places and ensure number
+            //     totalExpensesAmount: parseFloat(totalExpensesAmount.toFixed(2)), // Format to 2 decimal places and ensure number
+            //     netProfitLoss: parseFloat((totalInvoicesPaid - totalExpensesAmount).toFixed(2)) // Calculate net
+            // }
         };
 
         let message = 'Financial overview retrieved successfully';
@@ -400,6 +408,6 @@ exports.getFinancialOverview = async (req, res) => {
     } catch (error) {
         logger.error(`❌ getFinancialOverview error: ${error.message}`);
         logger.error(error.stack);
-        res.status(500).json({ error: 'Internal Server Error' });
+        res.status(500).json({ message: 'Internal Server Error', error: error.message });
     }
 };
