@@ -375,16 +375,16 @@ const startBillingTask = () => {
     logger.info('🔥 Debug Log: node-schedule job scheduled successfully.');
 
 
-    // Optional: Log the next invocation time (this will be every minute based on NODE_SCHEDULE_TRIGGER_SCHEDULE)
-    const nextInvocation = billingJob.nextInvocation();
-    if (nextInvocation) {
-        // The nextInvocation Date object is in the job's timezone (APP_TIMEZONE),
-        // so we can log it directly or convert it differently if needed.
-        // For simplicity, we'll just log the Date object string representation.
-        logger.info(`📅 Next node-schedule trigger invocation: ${nextInvocation.toISOString()}`);
-    } else {
-        logger.info('📅 No next node-schedule trigger invocation found.');
-    }
+    // // Optional: Log the next invocation time (this will be every minute based on NODE_SCHEDULE_TRIGGER_SCHEDULE)
+    // const nextInvocation = billingJob.nextInvocation();
+    // if (nextInvocation) {
+    //     // The nextInvocation Date object is in the job's timezone (APP_TIMEZONE),
+    //     // so we can log it directly or convert it differently if needed.
+    //     // For simplicity, we'll just log the Date object string representation.
+    //     logger.info(`📅 Next node-schedule trigger invocation: ${nextInvocation.toISOString()}`);
+    // } else {
+    //     logger.info('📅 No next node-schedule trigger invocation found.');
+    // }
     logger.info('🔥 Simple scheduled billing task started.'); // Keep this log for confirmation
 };
 
