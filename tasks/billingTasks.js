@@ -1,33 +1,48 @@
 // tasks/billingTasks.js
 
-const cron = require('node-cron'); // Import node-cron
+// Use node-schedule for triggering
+const schedule = require('node-schedule');
+const logger = require('../config/logger'); // Assuming you have a logger setup
 
 const db = require("../models");
 const sequelize = db.sequelize;
 const Sequelize = db.Sequelize;
 const { Op } = Sequelize;
 
-const { addDays, subDays, addMonths, endOfMonth, isLastDayOfMonth, isBefore, isAfter, startOfDay, format } = require('date-fns'); // Import date-fns functions, add format
-const { utcToZonedTime } = require('date-fns-tz'); // Import timezone function (npm install date-fns-tz)
+// Keep date-fns functions for date calculations (addDays, subDays, etc.)
+const { addDays, subDays, addMonths, endOfMonth, isLastDayOfMonth, isBefore, isAfter, startOfDay, format, isEqual } = require('date-fns');
+
+const moment = require('moment-timezone');
 
 const { Tenant, Invoice, Charge, Room, Price, AdditionalPrice, OtherCost, BoardingHouse } = require('../models'); // Import all necessary models
-
-const logger = require('../config/logger'); // Assuming you have a logger setup
 
 // Define how many days before the period end to issue the next invoice
 const DAYS_BEFORE_PERIOD_END_TO_ISSUE_INVOICE = 7;
 
-// Define the INTENDED cron schedule (e.g., run every day at 2:00 AM)
-// This is the schedule we WANT the task to run at.
-const INTENDED_BILLING_SCHEDULE = '0 2 * * *'; // 2:00 AM daily
+// Define the INTENDED schedule for the billing logic (2:00 AM)
+const INTENDED_BILLING_SCHEDULE_HOUR = 2; // 2 AM
+const INTENDED_BILLING_SCHEDULE_MINUTE = 0; // 0 minutes
 
-// Define a SIMPLE, RELIABLE cron schedule for the task to run frequently.
-// The task logic will check if it's time to actually run the billing process.
-// Using */5 * * * * (every 5 minutes) as it seemed to work outside the problematic window.
-const WORKAROUND_SCHEDULE = '*/5 * * * *';
+// Define the SIMPLE, RELIABLE cron schedule for node-schedule to trigger the task frequently.
+// The task logic will check if it's the intended time to actually run the billing process.
+const NODE_SCHEDULE_TRIGGER_SCHEDULE = '* * * * *'; // Run every minute
 
-// Define the timezone for date comparisons
-const APP_TIMEZONE = "Asia/Jakarta"; // Use the timezone that works outside the problematic window
+// Define the timezone for date comparisons and scheduling startup
+const APP_TIMEZONE = "Asia/Jakarta"; // Use the timezone you intend for the task to run in
+
+// 🔥 Add global unhandled error handlers (kept from previous version for robustness)
+process.on('uncaughtException', (err) => {
+    logger.error('❌ Uncaught Exception:', err);
+    // It's often recommended to exit the process after an uncaught exception
+    // to prevent the application from being in an unstable state.
+    // process.exit(1); // Consider adding this in production
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    logger.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
+    // Handle the rejection, e.g., log it and decide whether to exit
+});
+
 
 // Function to calculate the next billing period end date
 // Based on the rule: currentPeriodEnd + 1 month, adjust to last day if currentPeriodEnd was last day of month
@@ -49,28 +64,24 @@ const calculateNextPeriodEnd = (currentPeriodEnd) => {
     return nextPeriodEnd;
 };
 
-// Helper function to check if the current time matches the intended cron schedule
+// Helper function to check if the current time matches the intended schedule using moment-timezone
 const isTimeToRunBilling = () => {
     try {
-        const now = new Date();
-        // Convert current time to the application's timezone
-        const zonedTime = utcToZonedTime(now, APP_TIMEZONE);
+        // Get the current time and convert it to the application's timezone using moment-timezone
+        const zonedTime = moment().tz(APP_TIMEZONE);
 
-        // Check if the zoned time matches the INTENDED_BILLING_SCHEDULE
-        // We can use node-cron's internal check, but it's not directly exposed.
-        // A simpler way is to format the zoned time and compare parts based on the cron expression.
-        // For '0 2 * * *', we check if minutes are 0 and hours are 2.
+        // Extract the current hour and minute from the zoned time
+        const currentHour = zonedTime.hour();
+        const currentMinute = zonedTime.minute();
 
-        const currentMinute = parseInt(format(zonedTime, 'm'), 10);
-        const currentHour = parseInt(format(zonedTime, 'H'), 10); // H for 24-hour format
-
-        // Check if it matches '0 2 * * *' (0 minutes, 2 hours)
-        const matchesIntendedSchedule = currentMinute === 0 && currentHour === 2;
+        // Check if it matches the intended schedule (2:00 AM)
+        const matchesIntendedSchedule = currentHour === INTENDED_BILLING_SCHEDULE_HOUR && currentMinute === INTENDED_BILLING_SCHEDULE_MINUTE;
 
         if (matchesIntendedSchedule) {
-            logger.info(`⏰ Current time (${format(zonedTime, 'yyyy-MM-dd HH:mm:ss z')}) matches intended billing schedule (${INTENDED_BILLING_SCHEDULE}).`);
+            logger.info(`⏰ Current time (${zonedTime.format('YYYY-MM-DD HH:mm:ss z')}) matches intended billing schedule (0 ${INTENDED_BILLING_SCHEDULE_HOUR} * * *).`);
         } else {
-            // logger.debug(`Current time (${format(zonedTime, 'yyyy-MM-dd HH:mm:ss z')}) does not match intended billing schedule.`);
+            // Optional: Log when skipping for debugging if needed
+            // logger.info(`Current time (${zonedTime.format('YYYY-MM-DD HH:mm:ss z')}) does not match intended billing schedule.`);
         }
 
         return matchesIntendedSchedule;
@@ -83,16 +94,23 @@ const isTimeToRunBilling = () => {
 };
 
 
-// The main scheduled task function to generate monthly invoices
+// 🔥 The main scheduled task function to generate monthly invoices
+// This function is triggered frequently by node-schedule, but the logic
+// only runs at the intended time based on the internal check.
 const generateMonthlyInvoices = async () => {
-    // 🔥 Add the time check here
+    // 🔥 Add a debug log at the very beginning of the function
+    // logger.info('🔥 Debug Log: generateMonthlyInvoices function started.');
+
+    // Add the time check back here
     if (!isTimeToRunBilling()) {
-        // logger.debug('Skipping billing task execution as current time does not match intended schedule.');
+        // 🔥 Log when skipping the main logic
+        // logger.info('🔥 Debug Log: Skipping main billing logic as it is not the scheduled time.');
         return; // Exit if it's not the intended time to run the main logic
     }
 
     logger.info('📅 Running scheduled monthly invoice generation task...');
 
+    // Use new Date() directly, node-schedule handles the timezone for the schedule itself
     const today = startOfDay(new Date()); // Get the start of today for comparisons
     const billingCutoffDate = addDays(today, DAYS_BEFORE_PERIOD_END_TO_ISSUE_INVOICE); // Date by which periodEnd must occur
 
@@ -120,13 +138,13 @@ const generateMonthlyInvoices = async () => {
                 const latestPeriodEnd = new Date(item.latestPeriodEnd);
                 // Ensure the date is valid
                 if (isNaN(latestPeriodEnd.getTime())) {
-                    logger.warn(`⚠️ Invalid latestPeriodEnd date found for tenantId ${item.tenantId}: ${item.latestPeriodEnd}. Skipping.`);
+                    logger.info(`⚠️ Invalid latestPeriodEnd date found for tenantId ${item.tenantId}: ${item.latestPeriodEnd}. Skipping.`);
                     return false;
                 }
 
                 // Check if the latest period end is today or in the future, up to the cutoff date
-                return (isAfter(latestPeriodEnd, subDays(today, 1)) || isBefore(latestPeriodEnd, addDays(today, 1))) // Is today or in the future
-                    && (isBefore(latestPeriodEnd, addDays(billingCutoffDate, 1)) || isAfter(latestPeriodEnd, subDays(billingCutoffDate, 1))); // Is before or on the cutoff date
+                return (isAfter(latestPeriodEnd, subDays(today, 1)) || isEqual(latestPeriodEnd, today)) // Is today or in the future
+                    && (isBefore(latestPeriodEnd, addDays(billingCutoffDate, 1)) || isEqual(latestPeriodEnd, billingCutoffDate)); // Is before or on the cutoff date
             })
             .map(item => item.tenantId); // Get the tenant IDs
 
@@ -180,7 +198,7 @@ const generateMonthlyInvoices = async () => {
 
 
         if (tenantsToBill.length === 0) {
-            logger.info('📅 No tenants found with active status matching the IDs from step 1.');
+            logger.info('📅 No active tenants due for billing in the next 7 days based on latest invoice period end.');
             return;
         }
 
@@ -204,7 +222,7 @@ const generateMonthlyInvoices = async () => {
 
             // If for some reason the latest invoice wasn't found in this step (e.g., status changed), skip
             if (!latestInvoice) {
-                logger.warn(`⚠️ Could not find qualifying latest invoice for Tenant ${tenant.id} in step 3. Skipping.`);
+                logger.info(`⚠️ Could not find qualifying latest invoice for Tenant ${tenant.id} in step 3. Skipping.`);
                 continue;
             }
 
@@ -341,22 +359,39 @@ const generateMonthlyInvoices = async () => {
     }
 };
 
+
 // Function to start the scheduled task
 const startBillingTask = () => {
-    logger.info(`📅 Starting monthly invoice generation task with schedule: ${WORKAROUND_SCHEDULE}`);
-    // Use the workaround schedule that seems to start reliably.
-    cron.schedule(WORKAROUND_SCHEDULE, () => {
-        // 🔥 Check if it's the intended time to run the main logic
-        generateMonthlyInvoices(); // generateMonthlyInvoices now contains the time check
-    }, {
-        scheduled: true, // Task is scheduled immediately upon cron.schedule call
-        start: new Date(), // Keep explicit start date
-        timezone: APP_TIMEZONE // Use the timezone that works outside the problematic window
+    logger.info(`📅 Starting monthly invoice generation task trigger with schedule: ${NODE_SCHEDULE_TRIGGER_SCHEDULE} in timezone ${APP_TIMEZONE}. Task logic will run at ${INTENDED_BILLING_SCHEDULE_HOUR}:${INTENDED_BILLING_SCHEDULE_MINUTE}. `);
+
+    // Add debug log before scheduling the job
+    logger.info('🔥 Debug Log: Attempting to schedule the node-schedule job...');
+    // Use node-schedule.scheduleJob with the frequent trigger schedule and timezone
+    const billingJob = schedule.scheduleJob(NODE_SCHEDULE_TRIGGER_SCHEDULE, { timezone: APP_TIMEZONE }, () => {
+        // The billing logic runs only if the internal time check passes
+        generateMonthlyInvoices();
     });
+    // Add debug log after successfully scheduling the job
+    logger.info('🔥 Debug Log: node-schedule job scheduled successfully.');
+
+
+    // Optional: Log the next invocation time (this will be every minute based on NODE_SCHEDULE_TRIGGER_SCHEDULE)
+    const nextInvocation = billingJob.nextInvocation();
+    if (nextInvocation) {
+        // The nextInvocation Date object is in the job's timezone (APP_TIMEZONE),
+        // so we can log it directly or convert it differently if needed.
+        // For simplicity, we'll just log the Date object string representation.
+        logger.info(`📅 Next node-schedule trigger invocation: ${nextInvocation.toISOString()}`);
+    } else {
+        logger.info('📅 No next node-schedule trigger invocation found.');
+    }
+    logger.info('🔥 Simple scheduled billing task started.'); // Keep this log for confirmation
 };
 
 // Export the function to start the task
 module.exports = {
     startBillingTask,
-    generateMonthlyInvoices // Export the function itself if you want to trigger it manually
+    // We are not exporting generateMonthlyInvoices in this simplified version
+    // If you need to manually trigger it for testing, you can add it back here:
+    // generateMonthlyInvoices
 };
