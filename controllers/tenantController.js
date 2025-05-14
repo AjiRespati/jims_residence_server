@@ -371,9 +371,9 @@ exports.createTenant = async (req, res) => {
         const newPrice = await Price.create({
             boardingHouseId: room.boardingHouseId, // Get BH ID from the Room
             roomSize: priceRoomSize || 'Standard', // Use provided size or default
-            name: priceName || 'Base Rent', // Use provided name or default
+            name: priceName || 'Sewa kamar', // Use provided name or default
             amount: priceAmount, // Use the provided amount
-            description: priceDescription || `Base rent for ${priceRoomSize || 'Standard'} room`,
+            description: priceDescription || `Sewa kamar ${room.roomNumber || ''}`,
             createBy: req.user.username,
             updateBy: req.user.username,
             status: 'active' // New price is active by default
@@ -472,7 +472,7 @@ exports.createTenant = async (req, res) => {
                 invoiceId: firstInvoice.id, // Link to the new Invoice
                 name: newPrice.name,
                 amount: newPrice.amount,
-                description: newPrice.description || `Base rent for ${newPrice.roomSize} room`,
+                description: newPrice.description || `Sewa kamar`,
                 transactionType: 'debit',
                 createBy: req.user.username,
                 updateBy: req.user.username,

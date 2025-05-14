@@ -1,8 +1,9 @@
 const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');const db = require("../models");
+const jwt = require('jsonwebtoken');
+const db = require("../models");
 const sequelize = db.sequelize;
-// const Sequelize = db.Sequelize;
-const { User, Tenant, Transaction, Invoice, Charge, Room } = require("../models");
+
+const { User, Tenant, Invoice, Charge, Room } = require("../models");
 const logger = require('../config/logger');
 
 exports.register = async (req, res) => {
@@ -124,6 +125,7 @@ exports.self = async (req, res) => {
             phone: user.phone,
             email: user.email,
             level: user.level,
+            status: user.status,
             levelDesc: user.levelDesc,
         });
     } catch (error) {
@@ -142,16 +144,16 @@ exports.generic = async (req, res) => {
             case "Transaction":
                 // Get the QueryInterface instance
                 const queryInterface = sequelize.getQueryInterface();
-        
+
                 // Drop the 'Transactions' table
                 // The table name is typically the pluralized model name
                 console.log('Attempting to drop the "Transactions" table...');
                 await queryInterface.dropTable('Transactions');
                 console.log('"Transactions" table dropped successfully.');
-            //    let result =  await Transaction.destroy({
-            //         truncate: true
-            //     });
-            //     console.log(result);
+                //    let result =  await Transaction.destroy({
+                //         truncate: true
+                //     });
+                //     console.log(result);
                 break;
             case "Tenant":
                 await Tenant.destroy({
@@ -186,7 +188,7 @@ exports.generic = async (req, res) => {
 };
 
 const levelDescList = [
-    "Penjaga Kost",
+    "Petugas Kost",
     "Admin",
     "Pemilik",
 ];
