@@ -4,7 +4,9 @@ const Sequelize = db.Sequelize;
 const { Op } = Sequelize;
 const logger = require('../config/logger');
 
-const { Invoice, Expense, BoardingHouse, Tenant, Room, Charge, Transaction } = require('../models');
+const { Invoice, Expense, BoardingHouse, Tenant, Room,
+    Charge, Transaction, OtherCost
+} = require('../models');
 
 // Method to generate a monthly financial report
 exports.getMonthlyFinancialReport = async (req, res) => {
@@ -409,5 +411,214 @@ exports.getFinancialOverview = async (req, res) => {
         logger.error(`❌ getFinancialOverview error: ${error.message}`);
         logger.error(error.stack);
         res.status(500).json({ message: 'Internal Server Error', error: error.message });
+    }
+};
+
+// Method to get a list of financial transactions for table display, sorted by date
+exports.getFinancialTransactions = async (req, res) => {
+    try {
+        logger.info('Fetching financial transactions...');
+
+        // // Define a common set of attributes to select from financial models
+        // const commonAttributes = [
+        //     'id',
+        //     'amount',
+        //     'description',
+        //     'createdAt', // Use createdAt for sorting by creation date
+        //     'updatedAt',
+        // ];
+
+        // --- Query Invoices ---
+        // Invoices represent amounts due (debits)
+        const invoices = await Invoice.findAll({
+            attributes: [
+                'id',
+                'totalAmountDue',
+                'description',
+                'createdAt', // Use createdAt for sorting by creation date
+                'createBy',
+                'updatedAt',
+                ['periodStart', 'transactionDate'], // Use periodStart as a relevant date for invoices
+                [Sequelize.literal("'Invoice'"), 'type'], // Label the source
+                [Sequelize.literal("'debit'"), 'transactionType'], // Invoices are typically debits
+                'status', // Include invoice status
+                'tenantId',
+                'roomId',
+                'totalAmountPaid' // Include totalAmountPaid for calculating total income
+            ],
+            include: [
+                {
+                    model: Tenant,
+                    attributes: ['id', 'name'],
+                },
+                {
+                    model: Room,
+                    attributes: ['id', 'roomNumber'],
+                }
+            ],
+            where: {
+                // You might want to filter invoices based on status if needed, e.g.,
+                // status: { [Op.not]: ['Draft', 'Void'] }
+            },
+            raw: true, // Get raw data for easier processing
+            nest: true // Nest included models
+        });
+
+        // Map invoice data to a common format
+        const formattedInvoices = invoices.map(inv => ({
+            id: inv.id,
+            date: new Date(inv.createdAt), // Use createdAt for sorting
+            transactionDate: inv.transactionDate, // Keep the period start date
+            description: inv.description || `Invoice for period ${inv.transactionDate}`,
+            amount: inv.totalAmountDue, // Total amount due for the invoice
+            type: inv.type,
+            transactionType: inv.transactionType,
+            createBy: inv.createBy,
+            status: inv.status,
+            tenant: inv.Tenant ? inv.Tenant.name : 'N/A',
+            room: inv.Room ? inv.Room.roomNumber : 'N/A',
+            sourceId: inv.id, // Keep the original ID
+            sourceModel: 'Invoice', // Keep the original model name
+            totalAmountPaid: inv.totalAmountPaid // Include totalAmountPaid for summary calculation
+        }));
+
+        // Calculate total invoices paid
+        const totalInvoicesPaid = formattedInvoices.reduce((sum, inv) => sum + (inv.totalAmountPaid || 0), 0);
+
+
+        // // --- Query Other Costs ---
+        // // Other costs might be direct debits not tied to a monthly invoice
+        // const otherCosts = await OtherCost.findAll({
+        //     attributes: [
+        //         'id',
+        //         'name', // Use name as description
+        //         'amount',
+        //         'createdAt', // Use createdAt for sorting
+        //         'updatedAt',
+        //         // 🔥 Changed 'costDate' to 'createdAt' for transactionDate mapping
+        //         [Sequelize.literal('("OtherCost"."createdAt")'), 'transactionDate'], // Use createdAt as the relevant date
+        //         [Sequelize.literal("'Other Cost'"), 'type'], // Label the source
+        //         [Sequelize.literal("'debit'"), 'transactionType'], // Other costs are debits
+        //         'status', // Include status
+        //         'roomId' // Other costs are linked to rooms
+        //     ],
+        //     include: [
+        //         {
+        //             model: Room,
+        //             attributes: ['id', 'roomNumber'],
+        //             include: [ // Include Tenant through Room association
+        //                 {
+        //                     model: Tenant,
+        //                     attributes: ['id', 'name'],
+        //                     required: false // Tenant might not always be associated directly with the Room (e.g., vacant)
+        //                 }
+        //             ]
+        //         }
+        //     ],
+        //     where: {
+        //         // You might want to filter based on status
+        //         status: 'active' // Or other relevant statuses
+        //     },
+        //     raw: true,
+        //     nest: true
+        // });
+
+        // // Map other cost data to a common format
+        // const formattedOtherCosts = otherCosts.map(oc => ({
+        //     id: oc.id,
+        //     date: new Date(oc.createdAt), // Use createdAt for sorting
+        //     transactionDate: oc.transactionDate, // Keep the cost date (now mapped from createdAt)
+        //     description: oc.name || oc.description || 'Other Cost',
+        //     amount: oc.amount, // Amount (positive for debit)
+        //     type: oc.type,
+        //     transactionType: oc.transactionType,
+        //     status: oc.status,
+        //     // Get tenant name from the associated Room's Tenant if available
+        //     tenant: (oc.Room && oc.Room.Tenant) ? oc.Room.Tenant.name : 'N/A',
+        //     room: oc.Room ? oc.Room.roomNumber : 'N/A',
+        //     sourceId: oc.id,
+        //     sourceModel: 'OtherCost'
+        // }));
+
+        // --- Query Expenses ---
+        // Expenses represent costs incurred (credits from a financial perspective, but often displayed as negative or separate)
+        const expenses = await Expense.findAll({
+            attributes: [
+                'id',
+                'category', // Use category as part of description or separate column
+                'name', // Use name as description
+                'amount',
+                'createdAt', // Use createdAt for sorting
+                'createBy',
+                'updatedAt',
+                ['expenseDate', 'transactionDate'], // Use expenseDate as the relevant date
+                [Sequelize.literal("'Expense'"), 'type'], // Label the source
+                [Sequelize.literal("'credit'"), 'transactionType'], // Expenses are credits (outflows)
+                // Add status if Expense model has one
+                'boardingHouseId' // Link to boarding house
+            ],
+            include: [
+                {
+                    model: BoardingHouse,
+                    attributes: ['id', 'name'],
+                }
+            ],
+            where: {
+                // You might want to filter based on status if Expense model has one
+            },
+            raw: true,
+            nest: true
+        });
+
+        // Map expense data to a common format
+        const formattedExpenses = expenses.map(exp => ({
+            id: exp.id,
+            date: new Date(exp.createdAt), // Use createdAt for sorting
+            transactionDate: exp.transactionDate, // Keep the expense date
+            description: `${exp.category ? exp.category + ': ' : ''}${exp.name}` || exp.description || 'Expense',
+            amount: exp.amount, // Amount (positive for credit/outflow)
+            type: exp.type,
+            transactionType: exp.transactionType,
+            createBy: exp.createBy,
+            status: exp.status || 'N/A', // Use status from model if available
+            tenant: 'N/A', // Expenses are not typically tied to a single tenant
+            room: 'N/A', // Expenses are not typically tied to a single room
+            boardingHouse: exp.BoardingHouse ? exp.BoardingHouse.name : 'N/A', // Include Boarding House name
+            sourceId: exp.id,
+            sourceModel: 'Expense'
+        }));
+
+        // Calculate total expenses amount
+        const totalExpensesAmount = formattedExpenses.reduce((sum, exp) => sum + (exp.amount || 0), 0);
+
+
+        // --- Combine all financial transactions ---
+        const allTransactions = [
+            ...formattedInvoices,
+            // Removed formattedPayments
+            // ...formattedOtherCosts,
+            ...formattedExpenses
+        ];
+
+        // --- Sort the combined list by the 'date' field (createdAt) ---
+        allTransactions.sort((a, b) => b.date.getTime() - a.date.getTime()); // Sort descending by date
+
+        logger.info(`Successfully fetched and formatted ${allTransactions.length} financial transactions.`);
+
+        // Include summary totals in the response
+        res.status(200).json({
+            message: 'Financial transactions and summary retrieved successfully',
+            data: allTransactions,
+            summary: {
+                totalInvoicesPaid: totalInvoicesPaid,
+                totalExpensesAmount: totalExpensesAmount,
+                // You might add net income here if needed (totalInvoicesPaid - totalExpensesAmount)
+            }
+        });
+
+    } catch (error) {
+        logger.error(`❌ Error fetching financial transactions: ${error.message}`);
+        logger.error(error.stack);
+        res.status(500).json({ message: 'Internal server error', error: error.message });
     }
 };
