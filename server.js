@@ -10,7 +10,7 @@ const { startBillingTask } = require('./tasks/billingTasks'); // Adjust the path
 const app = express();
 
 //TODO: VERSIONING
-const version = "1.0.6";
+const version = "1.0.7";
 
 // ✅ Middlewares
 app.use(cors());
@@ -71,7 +71,7 @@ sequelize.sync({ alter: true })
         startBillingTask();
         logger.info('🔥 Scheduled billing task started.');
 
-        app.listen(PORT, () => logger.info(`🚀 Server running on port ${PORT}`));
+        app.listen(PORT, () => logger.info(`🚀 Server ${version} running on port ${PORT}`));
     })
     .catch((err) => {
         console.log(err);

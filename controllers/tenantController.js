@@ -10,8 +10,30 @@ const logger = require('../config/logger');
 const path = require("path");
 const fs = require("fs");
 const {
-    addDays, subDays, addMonths, endOfMonth, isLastDayOfMonth, isBefore, isAfter, startOfDay, format, isEqual
+    subDays, addMonths, endOfMonth, isLastDayOfMonth
 } = require('date-fns');
+
+
+// Helper function to delete a file safely (copied from updateTenant for completeness)
+const deleteFile = (filePath, logPrefix = 'File') => {
+    const fullPath = path.join(__dirname, '..', filePath);
+    if (!filePath || filePath === '/' || filePath.startsWith('..')) {
+         logger.warn(`⚠️ Attempted to delete invalid file path: ${filePath}`);
+         return;
+    }
+
+     fs.access(fullPath, fs.constants.F_OK, (err) => {
+        if (err) {
+            logger.warn(`⚠️ ${logPrefix} file not found for deletion: ${fullPath}`);
+        } else {
+             fs.unlink(fullPath, (err) => {
+                 if (err) logger.error(`❌ Error deleting ${logPrefix} file: ${fullPath}`, err);
+                 else logger.info(`🗑️ Deleted ${logPrefix} file: ${fullPath}`);
+             });
+        }
+     });
+};
+
 
 exports.getAllTenants = async (req, res) => {
     try {

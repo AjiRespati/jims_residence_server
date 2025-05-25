@@ -421,6 +421,9 @@ exports.getFinancialTransactions = async (req, res) => {
 
         const { boardingHouseId, dateFrom, dateTo } = req.query;
 
+        console.log("REQUEST QUERY: ", req.query);
+        console.log("BOARDING HOUSE: ", boardingHouseId);
+        
         let dateFilter = {};
         if (dateFrom && dateTo) {
             const startDate = new Date(dateFrom);
@@ -464,10 +467,12 @@ exports.getFinancialTransactions = async (req, res) => {
                 {
                     model: Room,
                     attributes: ['id', 'roomNumber'],
+                    required: true, // 🔥 Enforce the filter
                     include: [
                         {
                             model: BoardingHouse,
                             attributes: ['id', 'name'],
+                            required: true, // 🔥 Enforce the filter
                             where: boardingHouseId ? { id: boardingHouseId } : {} // Apply boardingHouseId filter
                         }
                     ],
