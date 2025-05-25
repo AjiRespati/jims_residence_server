@@ -91,6 +91,8 @@ exports.recordPayment = async (req, res) => {
             updateBy: req.user.username, // Update the invoice updater
         }, { transaction: t });
 
+        const room = await Room.findByPk(invoice.roomId, { transaction: t });
+        await room.update({ updateBy: req.user.username, roomStatus: 'Terisi' }, { transaction: t });
 
         // If all operations were successful, commit the transaction
         await t.commit();

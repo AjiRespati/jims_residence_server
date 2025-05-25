@@ -12,9 +12,12 @@ const { Op } = Sequelize;
 // Keep date-fns functions for date calculations (addDays, subDays, etc.)
 const { addDays, subDays, addMonths, endOfMonth, isLastDayOfMonth, isBefore, isAfter, startOfDay, format, isEqual } = require('date-fns');
 
+// Use moment and moment-timezone for the time check
+logger.debug('🔥 Debug Log: Attempting to import moment-timezone...');
 const moment = require('moment-timezone');
+logger.debug('🔥 Debug Log: moment-timezone imported successfully.');
 
-const { Tenant, Invoice, Charge, Room, Price, AdditionalPrice, OtherCost, BoardingHouse } = require('../models'); // Import all necessary models
+const { Tenant, Invoice, Charge, Room, Price, AdditionalPrice, OtherCost } = require('../models'); // Import all necessary models
 
 // Define how many days before the period end to issue the next invoice
 const DAYS_BEFORE_PERIOD_END_TO_ISSUE_INVOICE = 7;
@@ -30,16 +33,27 @@ const NODE_SCHEDULE_TRIGGER_SCHEDULE = '* * * * *'; // Run every minute
 // Define the timezone for date comparisons and scheduling startup
 const APP_TIMEZONE = "Asia/Jakarta"; // Use the timezone you intend for the task to run in
 
-// 🔥 Add global unhandled error handlers (kept from previous version for robustness)
+// 🔥 CRITICAL: Enhanced global unhandled error handlers to get full stack trace
 process.on('uncaughtException', (err) => {
-    logger.error('❌ Uncaught Exception:', err);
+    logger.error('❌ Uncaught Exception:', err.message);
+    logger.error(err.stack); // Log the full stack trace
     // It's often recommended to exit the process after an uncaught exception
     // to prevent the application from being in an unstable state.
     // process.exit(1); // Consider adding this in production
 });
 
 process.on('unhandledRejection', (reason, promise) => {
-    logger.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
+    // Log the reason as an error object, which should include the stack trace
+    logger.error('❌ Unhandled Rejection at Promise:', promise);
+    logger.error('Reason:', reason); // This will attempt to log the full object
+
+    if (reason instanceof Error) {
+        logger.error('Reason (Error message):', reason.message);
+        logger.error('Reason (Error stack):', reason.stack); // This is what we need!
+    } else {
+        // Fallback for non-Error rejections (e.g., a string or number)
+        logger.error('Reason (Non-Error):', JSON.stringify(reason, null, 2)); // Stringify for better readability
+    }
     // Handle the rejection, e.g., log it and decide whether to exit
 });
 
@@ -81,7 +95,7 @@ const isTimeToRunBilling = () => {
             logger.info(`⏰ Current time (${zonedTime.format('YYYY-MM-DD HH:mm:ss z')}) matches intended billing schedule (0 ${INTENDED_BILLING_SCHEDULE_HOUR} * * *).`);
         } else {
             // Optional: Log when skipping for debugging if needed
-            // logger.info(`Current time (${zonedTime.format('YYYY-MM-DD HH:mm:ss z')}) does not match intended billing schedule.`);
+            // logger.debug(`Current time (${zonedTime.format('YYYY-MM-DD HH:mm:ss z')}) does not match intended billing schedule.`);
         }
 
         return matchesIntendedSchedule;
@@ -94,17 +108,15 @@ const isTimeToRunBilling = () => {
 };
 
 
-// 🔥 The main scheduled task function to generate monthly invoices
+// The main scheduled task function to generate monthly invoices
 // This function is triggered frequently by node-schedule, but the logic
 // only runs at the intended time based on the internal check.
 const generateMonthlyInvoices = async () => {
-    // 🔥 Add a debug log at the very beginning of the function
-    // logger.info('🔥 Debug Log: generateMonthlyInvoices function started.');
+    logger.debug('🔥 Debug Log: generateMonthlyInvoices function started.');
 
     // Add the time check back here
     if (!isTimeToRunBilling()) {
-        // 🔥 Log when skipping the main logic
-        // logger.info('🔥 Debug Log: Skipping main billing logic as it is not the scheduled time.');
+        logger.debug('🔥 Debug Log: Skipping main billing logic as it is not the scheduled time.');
         return; // Exit if it's not the intended time to run the main logic
     }
 
@@ -118,7 +130,6 @@ const generateMonthlyInvoices = async () => {
         // --- Step 1: Find Tenants whose LATEST invoice is due for next billing ---
         // Query Invoices to find the latest invoice for each tenant that fits the criteria.
         // We use a subquery or similar logic to find the latest invoice per tenant.
-        // A common pattern is to group by tenantId and find the max periodEnd.
 
         // Find the latest periodEnd for each tenant
         const latestInvoicePeriodEnds = await Invoice.findAll({
@@ -138,7 +149,7 @@ const generateMonthlyInvoices = async () => {
                 const latestPeriodEnd = new Date(item.latestPeriodEnd);
                 // Ensure the date is valid
                 if (isNaN(latestPeriodEnd.getTime())) {
-                    logger.info(`⚠️ Invalid latestPeriodEnd date found for tenantId ${item.tenantId}: ${item.latestPeriodEnd}. Skipping.`);
+                    logger.warn(`⚠️ Invalid latestPeriodEnd date found for tenantId ${item.tenantId}: ${item.latestPeriodEnd}. Skipping.`);
                     return false;
                 }
 
@@ -192,17 +203,17 @@ const generateMonthlyInvoices = async () => {
                     ]
                 }
             ],
-            // No Invoice include here
-            // No HAVING or complex grouping needed on this main query
+            raw: true, // Get raw data for easier processing
+            nest: true // Nest included models
         });
 
 
         if (tenantsToBill.length === 0) {
             logger.info('📅 No active tenants due for billing in the next 7 days based on latest invoice period end.');
-            return;
+            return; // Exit if no tenants need billing
         }
 
-        logger.info(`📅 Proceeding to generate invoices for ${tenantsToBill.length} tenants.`);
+        logger.info(`📅 Found ${tenantsToBill.length} tenant IDs potentially due for billing.`);
 
 
         // --- Step 3: Iterate through tenants, fetch their latest invoice, and generate the next ---
@@ -222,7 +233,7 @@ const generateMonthlyInvoices = async () => {
 
             // If for some reason the latest invoice wasn't found in this step (e.g., status changed), skip
             if (!latestInvoice) {
-                logger.info(`⚠️ Could not find qualifying latest invoice for Tenant ${tenant.id} in step 3. Skipping.`);
+                logger.warn(`⚠️ Could not find qualifying latest invoice for Tenant ${tenant.id} in step 3. Skipping.`);
                 continue;
             }
 
@@ -359,39 +370,27 @@ const generateMonthlyInvoices = async () => {
     }
 };
 
-
 // Function to start the scheduled task
 const startBillingTask = () => {
     logger.info(`📅 Starting monthly invoice generation task trigger with schedule: ${NODE_SCHEDULE_TRIGGER_SCHEDULE} in timezone ${APP_TIMEZONE}. Task logic will run at ${INTENDED_BILLING_SCHEDULE_HOUR}:${INTENDED_BILLING_SCHEDULE_MINUTE}. `);
 
-    // Add debug log before scheduling the job
-    logger.info('🔥 Debug Log: Attempting to schedule the node-schedule job...');
-    // Use node-schedule.scheduleJob with the frequent trigger schedule and timezone
+    logger.debug('🔥 Debug Log: Attempting to schedule the node-schedule job...');
     const billingJob = schedule.scheduleJob(NODE_SCHEDULE_TRIGGER_SCHEDULE, { timezone: APP_TIMEZONE }, () => {
-        // The billing logic runs only if the internal time check passes
         generateMonthlyInvoices();
     });
-    // Add debug log after successfully scheduling the job
-    logger.info('🔥 Debug Log: node-schedule job scheduled successfully.');
+    logger.debug('🔥 Debug Log: node-schedule job scheduled successfully.');
 
-
-    // // Optional: Log the next invocation time (this will be every minute based on NODE_SCHEDULE_TRIGGER_SCHEDULE)
     // const nextInvocation = billingJob.nextInvocation();
     // if (nextInvocation) {
-    //     // The nextInvocation Date object is in the job's timezone (APP_TIMEZONE),
-    //     // so we can log it directly or convert it differently if needed.
-    //     // For simplicity, we'll just log the Date object string representation.
     //     logger.info(`📅 Next node-schedule trigger invocation: ${nextInvocation.toISOString()}`);
     // } else {
-    //     logger.info('📅 No next node-schedule trigger invocation found.');
+    //     logger.warn('📅 No next node-schedule trigger invocation found.');
     // }
-    logger.info('🔥 Simple scheduled billing task started.'); // Keep this log for confirmation
+    // logger.info('🔥 Simple scheduled billing task started.');
 };
 
 // Export the function to start the task
 module.exports = {
     startBillingTask,
-    // We are not exporting generateMonthlyInvoices in this simplified version
-    // If you need to manually trigger it for testing, you can add it back here:
-    // generateMonthlyInvoices
+    // generateMonthlyInvoices // Exported for manual testing if needed
 };

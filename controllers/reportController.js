@@ -4,7 +4,9 @@ const Sequelize = db.Sequelize;
 const { Op } = Sequelize;
 const logger = require('../config/logger');
 
-const { Invoice, Expense, BoardingHouse, Tenant, Room, Charge, Transaction } = require('../models');
+const { Invoice, Expense, BoardingHouse, Tenant, Room,
+    Charge, Transaction, OtherCost
+} = require('../models');
 
 // Method to generate a monthly financial report
 exports.getMonthlyFinancialReport = async (req, res) => {
@@ -409,5 +411,181 @@ exports.getFinancialOverview = async (req, res) => {
         logger.error(`❌ getFinancialOverview error: ${error.message}`);
         logger.error(error.stack);
         res.status(500).json({ message: 'Internal Server Error', error: error.message });
+    }
+};
+
+// Method to get a list of financial transactions for table display, sorted by date
+exports.getFinancialTransactions = async (req, res) => {
+    try {
+        logger.info('Fetching financial transactions...');
+
+        const { boardingHouseId, dateFrom, dateTo } = req.query;
+
+        console.log("REQUEST QUERY: ", req.query);
+        console.log("BOARDING HOUSE: ", boardingHouseId);
+        
+        let dateFilter = {};
+        if (dateFrom && dateTo) {
+            const startDate = new Date(dateFrom);
+            const endDate = new Date(dateTo);
+
+            // Validate dates
+            if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+                return res.status(400).json({ message: 'Invalid date format for dateFrom or dateTo.' });
+            }
+
+            dateFilter = {
+                createdAt: {
+                    [Op.between]: [startDate, endDate]
+                }
+            };
+        }
+
+        // --- Query Invoices ---
+        // Invoices represent amounts due (debits)
+        const invoices = await Invoice.findAll({
+            attributes: [
+                'id',
+                'totalAmountDue',
+                'description',
+                'createdAt', // Use createdAt for sorting by creation date
+                'createBy',
+                'updatedAt',
+                ['periodStart', 'transactionDate'], // Use periodStart as a relevant date for invoices
+                [Sequelize.literal("'Invoice'"), 'type'], // Label the source
+                [Sequelize.literal("'debit'"), 'transactionType'], // Invoices are typically debits
+                'status', // Include invoice status
+                'tenantId',
+                'roomId',
+                'totalAmountPaid' // Include totalAmountPaid for calculating total income
+            ],
+            include: [
+                {
+                    model: Tenant,
+                    attributes: ['id', 'name'],
+                },
+                {
+                    model: Room,
+                    attributes: ['id', 'roomNumber'],
+                    required: true, // 🔥 Enforce the filter
+                    include: [
+                        {
+                            model: BoardingHouse,
+                            attributes: ['id', 'name'],
+                            required: true, // 🔥 Enforce the filter
+                            where: boardingHouseId ? { id: boardingHouseId } : {} // Apply boardingHouseId filter
+                        }
+                    ],
+                }
+            ],
+            where: {
+                ...dateFilter, // Apply date filter to Invoice's createdAt
+                // You might want to filter invoices based on status if needed, e.g.,
+                // status: { [Op.not]: ['Draft', 'Void'] }
+            },
+            raw: true, // Get raw data for easier processing
+            nest: true // Nest included models
+        });
+
+        // Map invoice data to a common format
+        const formattedInvoices = invoices.map(inv => ({
+            id: inv.id,
+            date: new Date(inv.createdAt), // Use createdAt for sorting
+            transactionDate: inv.transactionDate, // Keep the period start date
+            description: inv.description || `Invoice for period ${inv.transactionDate}`,
+            amount: inv.totalAmountDue, // Total amount due for the invoice
+            type: inv.type,
+            transactionType: inv.transactionType,
+            createBy: inv.createBy,
+            status: inv.status,
+            tenant: inv.Tenant ? inv.Tenant.name : 'N/A',
+            room: inv.Room ? inv.Room.roomNumber : 'N/A',
+            boardingHouse: inv.Room.BoardingHouse ? inv.Room.BoardingHouse.name : 'N/A', // Include Boarding House name
+            sourceId: inv.id, // Keep the original ID
+            sourceModel: 'Invoice', // Keep the original model name
+            totalAmountPaid: inv.totalAmountPaid // Include totalAmountPaid for summary calculation
+        }));
+
+        // Calculate total invoices paid
+        const totalInvoicesPaid = formattedInvoices.reduce((sum, inv) => sum + (inv.totalAmountPaid || 0), 0);
+
+        // --- Query Expenses ---
+        // Expenses represent costs incurred (credits from a financial perspective, but often displayed as negative or separate)
+        const expenses = await Expense.findAll({
+            attributes: [
+                'id',
+                'category', // Use category as part of description or separate column
+                'name', // Use name as description
+                'amount',
+                'createdAt', // Use createdAt for sorting
+                'createBy',
+                'updatedAt',
+                ['expenseDate', 'transactionDate'], // Use expenseDate as the relevant date
+                [Sequelize.literal("'Expense'"), 'type'], // Label the source
+                [Sequelize.literal("'credit'"), 'transactionType'], // Expenses are credits (outflows)
+                // Add status if Expense model has one
+                'boardingHouseId' // Link to boarding house
+            ],
+            include: [
+                {
+                    model: BoardingHouse,
+                    attributes: ['id', 'name'],
+                    where: boardingHouseId ? { id: boardingHouseId } : {} // Apply boardingHouseId filter
+                }
+            ],
+            where: {
+                ...dateFilter, // Apply date filter to Invoice's createdAt
+            },
+            raw: true,
+            nest: true
+        });
+
+        // Map expense data to a common format
+        const formattedExpenses = expenses.map(exp => ({
+            id: exp.id,
+            date: new Date(exp.createdAt), // Use createdAt for sorting
+            transactionDate: exp.transactionDate, // Keep the expense date
+            description: `${exp.category ? exp.category + ': ' : ''}${exp.name}` || exp.description || 'Expense',
+            amount: exp.amount, // Amount (positive for credit/outflow)
+            type: exp.type,
+            transactionType: exp.transactionType,
+            createBy: exp.createBy,
+            status: exp.status || 'N/A', // Use status from model if available
+            tenant: 'N/A', // Expenses are not typically tied to a single tenant
+            room: 'N/A', // Expenses are not typically tied to a single room
+            boardingHouse: exp.BoardingHouse ? exp.BoardingHouse.name : 'N/A', // Include Boarding House name
+            sourceId: exp.id,
+            sourceModel: 'Expense'
+        }));
+
+        // Calculate total expenses amount
+        const totalExpensesAmount = formattedExpenses.reduce((sum, exp) => sum + (exp.amount || 0), 0);
+
+        // --- Combine all financial transactions ---
+        const allTransactions = [
+            ...formattedInvoices,
+            ...formattedExpenses
+        ];
+
+        // --- Sort the combined list by the 'date' field (createdAt) ---
+        allTransactions.sort((a, b) => b.date.getTime() - a.date.getTime()); // Sort descending by date
+
+        logger.info(`Successfully fetched and formatted ${allTransactions.length} financial transactions.`);
+
+        // Include summary totals in the response
+        res.status(200).json({
+            message: 'Financial transactions and summary retrieved successfully',
+            data: allTransactions,
+            summary: {
+                totalInvoicesPaid: totalInvoicesPaid,
+                totalExpensesAmount: totalExpensesAmount,
+                // You might add net income here if needed (totalInvoicesPaid - totalExpensesAmount)
+            }
+        });
+
+    } catch (error) {
+        logger.error(`❌ Error fetching financial transactions: ${error.message}`);
+        logger.error(error.stack);
+        res.status(500).json({ message: 'Internal server error', error: error.message });
     }
 };
