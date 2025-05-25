@@ -419,14 +419,24 @@ exports.getFinancialTransactions = async (req, res) => {
     try {
         logger.info('Fetching financial transactions...');
 
-        // // Define a common set of attributes to select from financial models
-        // const commonAttributes = [
-        //     'id',
-        //     'amount',
-        //     'description',
-        //     'createdAt', // Use createdAt for sorting by creation date
-        //     'updatedAt',
-        // ];
+        const { boardingHouseId, dateFrom, dateTo } = req.query;
+
+        let dateFilter = {};
+        if (dateFrom && dateTo) {
+            const startDate = new Date(dateFrom);
+            const endDate = new Date(dateTo);
+
+            // Validate dates
+            if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+                return res.status(400).json({ message: 'Invalid date format for dateFrom or dateTo.' });
+            }
+
+            dateFilter = {
+                createdAt: {
+                    [Op.between]: [startDate, endDate]
+                }
+            };
+        }
 
         // --- Query Invoices ---
         // Invoices represent amounts due (debits)
@@ -454,9 +464,17 @@ exports.getFinancialTransactions = async (req, res) => {
                 {
                     model: Room,
                     attributes: ['id', 'roomNumber'],
+                    include: [
+                        {
+                            model: BoardingHouse,
+                            attributes: ['id', 'name'],
+                            where: boardingHouseId ? { id: boardingHouseId } : {} // Apply boardingHouseId filter
+                        }
+                    ],
                 }
             ],
             where: {
+                ...dateFilter, // Apply date filter to Invoice's createdAt
                 // You might want to filter invoices based on status if needed, e.g.,
                 // status: { [Op.not]: ['Draft', 'Void'] }
             },
@@ -477,6 +495,7 @@ exports.getFinancialTransactions = async (req, res) => {
             status: inv.status,
             tenant: inv.Tenant ? inv.Tenant.name : 'N/A',
             room: inv.Room ? inv.Room.roomNumber : 'N/A',
+            boardingHouse: inv.Room.BoardingHouse ? inv.Room.BoardingHouse.name : 'N/A', // Include Boarding House name
             sourceId: inv.id, // Keep the original ID
             sourceModel: 'Invoice', // Keep the original model name
             totalAmountPaid: inv.totalAmountPaid // Include totalAmountPaid for summary calculation
@@ -484,61 +503,6 @@ exports.getFinancialTransactions = async (req, res) => {
 
         // Calculate total invoices paid
         const totalInvoicesPaid = formattedInvoices.reduce((sum, inv) => sum + (inv.totalAmountPaid || 0), 0);
-
-
-        // // --- Query Other Costs ---
-        // // Other costs might be direct debits not tied to a monthly invoice
-        // const otherCosts = await OtherCost.findAll({
-        //     attributes: [
-        //         'id',
-        //         'name', // Use name as description
-        //         'amount',
-        //         'createdAt', // Use createdAt for sorting
-        //         'updatedAt',
-        //         // 🔥 Changed 'costDate' to 'createdAt' for transactionDate mapping
-        //         [Sequelize.literal('("OtherCost"."createdAt")'), 'transactionDate'], // Use createdAt as the relevant date
-        //         [Sequelize.literal("'Other Cost'"), 'type'], // Label the source
-        //         [Sequelize.literal("'debit'"), 'transactionType'], // Other costs are debits
-        //         'status', // Include status
-        //         'roomId' // Other costs are linked to rooms
-        //     ],
-        //     include: [
-        //         {
-        //             model: Room,
-        //             attributes: ['id', 'roomNumber'],
-        //             include: [ // Include Tenant through Room association
-        //                 {
-        //                     model: Tenant,
-        //                     attributes: ['id', 'name'],
-        //                     required: false // Tenant might not always be associated directly with the Room (e.g., vacant)
-        //                 }
-        //             ]
-        //         }
-        //     ],
-        //     where: {
-        //         // You might want to filter based on status
-        //         status: 'active' // Or other relevant statuses
-        //     },
-        //     raw: true,
-        //     nest: true
-        // });
-
-        // // Map other cost data to a common format
-        // const formattedOtherCosts = otherCosts.map(oc => ({
-        //     id: oc.id,
-        //     date: new Date(oc.createdAt), // Use createdAt for sorting
-        //     transactionDate: oc.transactionDate, // Keep the cost date (now mapped from createdAt)
-        //     description: oc.name || oc.description || 'Other Cost',
-        //     amount: oc.amount, // Amount (positive for debit)
-        //     type: oc.type,
-        //     transactionType: oc.transactionType,
-        //     status: oc.status,
-        //     // Get tenant name from the associated Room's Tenant if available
-        //     tenant: (oc.Room && oc.Room.Tenant) ? oc.Room.Tenant.name : 'N/A',
-        //     room: oc.Room ? oc.Room.roomNumber : 'N/A',
-        //     sourceId: oc.id,
-        //     sourceModel: 'OtherCost'
-        // }));
 
         // --- Query Expenses ---
         // Expenses represent costs incurred (credits from a financial perspective, but often displayed as negative or separate)
@@ -561,10 +525,11 @@ exports.getFinancialTransactions = async (req, res) => {
                 {
                     model: BoardingHouse,
                     attributes: ['id', 'name'],
+                    where: boardingHouseId ? { id: boardingHouseId } : {} // Apply boardingHouseId filter
                 }
             ],
             where: {
-                // You might want to filter based on status if Expense model has one
+                ...dateFilter, // Apply date filter to Invoice's createdAt
             },
             raw: true,
             nest: true
@@ -591,12 +556,9 @@ exports.getFinancialTransactions = async (req, res) => {
         // Calculate total expenses amount
         const totalExpensesAmount = formattedExpenses.reduce((sum, exp) => sum + (exp.amount || 0), 0);
 
-
         // --- Combine all financial transactions ---
         const allTransactions = [
             ...formattedInvoices,
-            // Removed formattedPayments
-            // ...formattedOtherCosts,
             ...formattedExpenses
         ];
 
