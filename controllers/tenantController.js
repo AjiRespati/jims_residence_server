@@ -268,6 +268,7 @@ exports.getTenantById = async (req, res) => {
                     ],
                     required: false, // Use LEFT JOIN so tenants without invoices are also included
                     order: [['issueDate', 'DESC']], // Optional: Order invoices, e.g., by most recent first
+                    separate: true,
                     include: [
                         {
                             model: Charge, // Include the Charges within EACH Invoice
