@@ -243,7 +243,7 @@ const generateMonthlyInvoices = async () => {
             // Calculate the dates for the next invoice
             const nextPeriodStart = addDays(latestInvoice.periodEnd, 1);
             const nextPeriodEnd = calculateNextPeriodEnd(latestInvoice.periodEnd); // Use the helper function
-            const nextIssueDate = subDays(nextPeriodEnd, DAYS_BEFORE_PERIOD_END_TO_ISSUE_INVOICE); // Issue 7 days before next period end
+            const nextIssueDate = subDays(nextPeriodStart, DAYS_BEFORE_PERIOD_END_TO_ISSUE_INVOICE); // Issue 7 days before next period end
             const nextDueDate = addDays(nextPeriodStart, 7); // Due 7 days after next period start
             const nextBanishDate = addDays(nextPeriodStart, 14); // Banish 14 days after next period start
 
