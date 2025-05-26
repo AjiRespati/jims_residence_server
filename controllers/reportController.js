@@ -7,6 +7,7 @@ const logger = require('../config/logger');
 const { Invoice, Expense, BoardingHouse, Tenant, Room,
     Charge, Transaction, OtherCost
 } = require('../models');
+const { Console } = require("winston/lib/winston/transports");
 
 // Method to generate a monthly financial report
 exports.getMonthlyFinancialReport = async (req, res) => {
@@ -298,7 +299,12 @@ exports.getFinancialOverview = async (req, res) => {
 
         // --- Fetch Filtered Invoices ---
         // Filter invoices by issueDate and optionally by BoardingHouse via Room include
-        const invoiceWhere = isDateFilterApplied ? { issueDate: dateConditions } : undefined;
+        const invoiceWhere = isDateFilterApplied ? {
+            issueDate: dateConditions,
+            status: { [Op.not]: ['Draft', 'Void', 'Unpaid'] }
+        } : {
+            status: { [Op.not]: ['Draft', 'Void', 'Unpaid'] }
+        };
 
         // The BoardingHouse include where clause only contains BH ID filter or is undefined
         const boardingHouseIncludeWhere = isBoardingHouseFilterApplied ? boardingHouseConditions : undefined;
@@ -334,7 +340,7 @@ exports.getFinancialOverview = async (req, res) => {
                 { model: Charge, as: 'Charges', attributes: ['id', 'name', 'amount', 'description', 'transactionType'], required: false }, // Include description for Charges
                 { model: Transaction, as: 'Transactions', attributes: ['id', 'amount', 'transactionDate', 'method', 'description', 'transactionProofPath'], required: false } // Include more details for Transactions
             ],
-            order: [['issueDate', 'DESC']], // Default order
+            order: [['createdAt', 'DESC']], // Default order
             // raw: true // Keep raw: true for now
         });
 
@@ -365,6 +371,8 @@ exports.getFinancialOverview = async (req, res) => {
             // raw: true // Keep raw: true for now
         });
 
+        let invoicesJSON = invoices.map(invoice => invoice.toJSON());
+        let expensesJSON = expenses.map(expense => expense.toJSON());
 
         // --- Calculate Totals ---
         const totalInvoicesPaid = invoices.reduce((sum, invoice) => sum + (invoice.totalAmountPaid || 0), 0);
@@ -380,8 +388,8 @@ exports.getFinancialOverview = async (req, res) => {
                 dateFrom: dateFrom || 'Beginning',
                 dateTo: dateTo || 'End'
             },
-            invoices: invoices.map(invoice => invoice.toJSON()), // Convert to plain JSON
-            expenses: expenses.map(expense => expense.toJSON()), // Convert to plain JSON
+            invoices: invoicesJSON, // Convert to plain JSON
+            expenses: expensesJSON, // Convert to plain JSON
             totalInvoicesPaid: parseFloat(totalInvoicesPaid.toFixed(2)), // Format to 2 decimal places and ensure number
             totalExpensesAmount: parseFloat(totalExpensesAmount.toFixed(2)) // Format to 2 decimal places and ensure number
             // totals: { // 🔥 Add totals here
@@ -423,7 +431,7 @@ exports.getFinancialTransactions = async (req, res) => {
 
         console.log("REQUEST QUERY: ", req.query);
         console.log("BOARDING HOUSE: ", boardingHouseId);
-        
+
         let dateFilter = {};
         if (dateFrom && dateTo) {
             const startDate = new Date(dateFrom);
@@ -448,6 +456,7 @@ exports.getFinancialTransactions = async (req, res) => {
                 'id',
                 'totalAmountDue',
                 'description',
+                'issueDate',
                 'createdAt', // Use createdAt for sorting by creation date
                 'createBy',
                 'updatedAt',
@@ -481,8 +490,9 @@ exports.getFinancialTransactions = async (req, res) => {
             where: {
                 ...dateFilter, // Apply date filter to Invoice's createdAt
                 // You might want to filter invoices based on status if needed, e.g.,
-                // status: { [Op.not]: ['Draft', 'Void'] }
+                status: { [Op.not]: ['Draft', 'Void', 'Unpaid'] },
             },
+            order: [['createdAt', 'DESC']],
             raw: true, // Get raw data for easier processing
             nest: true // Nest included models
         });
@@ -536,6 +546,7 @@ exports.getFinancialTransactions = async (req, res) => {
             where: {
                 ...dateFilter, // Apply date filter to Invoice's createdAt
             },
+            order: [['expenseDate', 'DESC']], 
             raw: true,
             nest: true
         });
