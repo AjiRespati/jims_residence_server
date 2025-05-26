@@ -301,9 +301,9 @@ exports.getFinancialOverview = async (req, res) => {
         // Filter invoices by issueDate and optionally by BoardingHouse via Room include
         const invoiceWhere = isDateFilterApplied ? {
             issueDate: dateConditions,
-            status: { [Op.not]: ['Draft', 'Void', 'Unpaid'] }
+            status: { [Op.not]: ['Draft', 'Void', 'Unpaid', 'Issued'] }
         } : {
-            status: { [Op.not]: ['Draft', 'Void', 'Unpaid'] }
+            status: { [Op.not]: ['Draft', 'Void', 'Unpaid', 'Issued'] }
         };
 
         // The BoardingHouse include where clause only contains BH ID filter or is undefined
@@ -490,7 +490,7 @@ exports.getFinancialTransactions = async (req, res) => {
             where: {
                 ...dateFilter, // Apply date filter to Invoice's createdAt
                 // You might want to filter invoices based on status if needed, e.g.,
-                status: { [Op.not]: ['Draft', 'Void', 'Unpaid'] },
+                status: { [Op.not]: ['Draft', 'Void', 'Unpaid', 'Issued'] },
             },
             order: [['createdAt', 'DESC']],
             raw: true, // Get raw data for easier processing
