@@ -4,7 +4,7 @@ const Sequelize = db.Sequelize;
 const { Op } = Sequelize;
 
 const { Tenant, Room, Price, AdditionalPrice, OtherCost,
-    Invoice, Charge, BoardingHouse
+    Invoice, Charge, BoardingHouse, Transaction
 } = require('../models');
 const logger = require('../config/logger');
 const path = require("path");
@@ -283,6 +283,19 @@ exports.getTenantById = async (req, res) => {
                                 'updateBy'
                             ],
                             required: false // Use LEFT JOIN so invoices without charges (unlikely) are included
+                        },
+                        {
+                            model: Transaction, // Include the Transaction within EACH Invoice
+                            as: 'Transactions', // Use the alias defined in the Invoice model association
+                            attributes: [ // Select relevant Transaction attributes
+                                'id',
+                                'amount',
+                                'description',
+                                'transactionDate',
+                                'createBy',
+                                'updateBy'
+                            ],
+                            required: false // Use LEFT JOIN so invoices without Transaction (unlikely) are included
                         }
                     ]
                 }
@@ -587,21 +600,6 @@ exports.updateTenant = async (req, res) => {
                 return res.status(404).json({ message: 'Provided Boarding House not found' });
             }
         }
-        if (tenantUpdateData.priceId) {
-            const price = await Price.findOne({
-                where: {
-                    id: tenantUpdateData.priceId,
-                    // Check against the provided boardingHouseId if present, otherwise against the tenant's current one
-                    boardingHouseId: tenantUpdateData.boardingHouseId || tenant.boardingHouseId
-                }
-                // , { transaction: t }
-            });
-            if (!price) {
-                // await t.rollback();
-                return res.status(404).json({ message: 'Provided Price not found or does not belong to the specified Boarding House' });
-            }
-        }
-
 
         // 4. Update the tenant record (only if there are fields to update or an image path)
         if (Object.keys(tenantUpdateData).length === 0) {
