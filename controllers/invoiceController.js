@@ -575,3 +575,18 @@ exports.deleteInvoice = async (req, res) => {
         res.status(500).json({ error: 'Internal Server Error' });
     }
 };
+
+// Method to "delete" an invoice by marking its status as 'Void'
+exports.hardDeleteInvoice = async (req, res) => {
+    try {
+        const data = await Invoice.findByPk(req.params.id);
+        if (!data) return res.status(404).json({ error: 'Invoice not found' });
+
+        await data.destroy();
+        res.json({ message: 'Invoice deleted successfully' });
+    } catch (error) {
+        logger.error(`❌ deleteInvoice error: ${error.message}`);
+        logger.error(error.stack);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};

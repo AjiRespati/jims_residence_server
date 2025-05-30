@@ -23,7 +23,7 @@ const { Tenant, Invoice, Charge, Room, Price, AdditionalPrice, OtherCost } = req
 const DAYS_BEFORE_PERIOD_END_TO_ISSUE_INVOICE = 7;
 
 // Define the INTENDED schedule for the billing logic (2:00 AM)
-const INTENDED_BILLING_SCHEDULE_HOUR = 2; // 2 AM
+const INTENDED_BILLING_SCHEDULE_HOUR = 1; // 1 AM
 const INTENDED_BILLING_SCHEDULE_MINUTE = 0; // 0 minutes
 
 // Define the SIMPLE, RELIABLE cron schedule for node-schedule to trigger the task frequently.
@@ -61,6 +61,9 @@ process.on('unhandledRejection', (reason, promise) => {
 // Function to calculate the next billing period end date
 // Based on the rule: currentPeriodEnd + 1 month, adjust to last day if currentPeriodEnd was last day of month
 const calculateNextPeriodEnd = (currentPeriodEnd) => {
+    // This function now correctly calculates the end date for the *next* period
+    // given the *end date of the previous period*.
+
     const nextPeriodStart = addDays(currentPeriodEnd, 1); // Next period starts the day after the current ends
 
     let nextPeriodEnd = addMonths(nextPeriodStart, 1);
@@ -122,83 +125,39 @@ const generateMonthlyInvoices = async () => {
 
     logger.info('📅 Running scheduled monthly invoice generation task...');
 
-    // Use new Date() directly, node-schedule handles the timezone for the schedule itself
     const today = startOfDay(new Date()); // Get the start of today for comparisons
-    const billingCutoffDate = addDays(today, DAYS_BEFORE_PERIOD_END_TO_ISSUE_INVOICE); // Date by which periodEnd must occur
 
     try {
-        // --- Step 1: Find Tenants whose LATEST invoice is due for next billing ---
-        // Query Invoices to find the latest invoice for each tenant that fits the criteria.
-        // We use a subquery or similar logic to find the latest invoice per tenant.
-
-        // Find the latest periodEnd for each tenant
-        const latestInvoicePeriodEnds = await Invoice.findAll({
-            attributes: [
-                'tenantId',
-                [sequelize.fn('max', sequelize.col('periodEnd')), 'latestPeriodEnd']
-            ],
-            group: ['tenantId'],
-            raw: true // Return raw data
-        });
-
-        // Filter the latest period ends to find those within the billing cutoff range
-        const tenantIdsDueForBilling = latestInvoicePeriodEnds
-            .filter(item => {
-                // Ensure item.latestPeriodEnd is not null before creating Date object
-                if (!item.latestPeriodEnd) return false;
-                const latestPeriodEnd = new Date(item.latestPeriodEnd);
-                // Ensure the date is valid
-                if (isNaN(latestPeriodEnd.getTime())) {
-                    logger.warn(`⚠️ Invalid latestPeriodEnd date found for tenantId ${item.tenantId}: ${item.latestPeriodEnd}. Skipping.`);
-                    return false;
-                }
-
-                // Check if the latest period end is today or in the future, up to the cutoff date
-                return (isAfter(latestPeriodEnd, subDays(today, 1)) || isEqual(latestPeriodEnd, today)) // Is today or in the future
-                    && (isBefore(latestPeriodEnd, addDays(billingCutoffDate, 1)) || isEqual(latestPeriodEnd, billingCutoffDate)); // Is before or on the cutoff date
-            })
-            .map(item => item.tenantId); // Get the tenant IDs
-
-        if (tenantIdsDueForBilling.length === 0) {
-            logger.info('📅 No active tenants due for billing in the next 7 days based on latest invoice period end.');
-            return; // Exit if no tenants need billing
-        }
-
-        logger.info(`📅 Found ${tenantIdsDueForBilling.length} tenant IDs potentially due for billing.`);
-
-
-        // --- Step 2: Fetch the full Tenant details for those IDs, including Room and current costs (WITHOUT INVOICE INCLUDE) ---
-        const tenantsToBill = await Tenant.findAll({
+        // --- Step 1: Fetch ALL Active Tenants with their Room and current active costs ---
+        // The previous filtering by latest invoice date is removed.
+        // The new logic iterates through each tenant and uses a while loop to catch up.
+        const allActiveTenants = await Tenant.findAll({
             where: {
-                id: {
-                    [Op.in]: tenantIdsDueForBilling // Filter tenants by the IDs found
-                },
-                tenancyStatus: 'Active' // Double-check active status
+                tenancyStatus: 'Active'
             },
             include: [
-                // Include Room and its costs to get current billing details
                 {
                     model: Room,
                     attributes: ['id', 'roomNumber'],
-                    required: true, // Require Room association
+                    required: true,
                     include: [
                         {
                             model: Price,
                             attributes: ['id', 'name', 'amount', 'description'],
-                            where: { status: 'active' }, // Get current active Price
-                            required: true // Require active Price
+                            where: { status: 'active' },
+                            required: true
                         },
                         {
                             model: AdditionalPrice,
                             attributes: ['id', 'name', 'amount', 'description'],
-                            where: { status: 'active' }, // Get current active Additional Prices
-                            required: false // Don't require additional prices
+                            where: { status: 'active' },
+                            required: false
                         },
                         {
                             model: OtherCost,
                             attributes: ['id', 'name', 'amount', 'description'],
-                            where: { status: 'active' }, // Get current active Other Costs
-                            required: false // Don't require other costs
+                            where: { status: 'active' },
+                            required: false
                         }
                     ]
                 }
@@ -207,165 +166,211 @@ const generateMonthlyInvoices = async () => {
             nest: true // Nest included models
         });
 
-
-        if (tenantsToBill.length === 0) {
-            logger.info('📅 No active tenants due for billing in the next 7 days based on latest invoice period end.');
-            return; // Exit if no tenants need billing
+        if (allActiveTenants.length === 0) {
+            logger.info('📅 No active tenants found for billing processing.');
+            return;
         }
 
-        logger.info(`📅 Found ${tenantsToBill.length} tenant IDs potentially due for billing.`);
+        logger.info(`📅 Found ${allActiveTenants.length} active tenants for billing processing.`);
 
 
-        // --- Step 3: Iterate through tenants, fetch their latest invoice, and generate the next ---
-        for (const tenant of tenantsToBill) {
-            // Fetch the latest invoice for this specific tenant
-            const latestInvoice = await Invoice.findOne({
+        // --- Step 2: Iterate through each active tenant and generate missing invoices ---
+        for (const tenant of allActiveTenants) {
+            logger.info(`Processing invoices for Tenant ${tenant.id} (${tenant.name})`);
+
+            // This will be the `periodStart` for the invoice we are attempting to create in each loop iteration
+            let currentPeriodStartForInvoice;
+            // This will be the `periodEnd` of the *previous* invoice, used by `calculateNextPeriodEnd`
+            let previousPeriodEndForCalculation;
+
+            // Fetch the very latest existing invoice for this tenant (any non-Void status)
+            const latestExistingInvoice = await Invoice.findOne({
                 where: {
                     tenantId: tenant.id,
-                    // Ensure it's the latest one that qualified in Step 1's date range
-                    periodEnd: {
-                        [Op.between]: [subDays(billingCutoffDate, DAYS_BEFORE_PERIOD_END_TO_ISSUE_INVOICE), billingCutoffDate]
-                    },
-                    status: { [Op.not]: 'Void' } // Exclude void invoices
-                },
-                order: [['periodEnd', 'DESC'], ['issueDate', 'DESC']], // Get the very latest one
-            });
-
-            // If for some reason the latest invoice wasn't found in this step (e.g., status changed), skip
-            if (!latestInvoice) {
-                logger.warn(`⚠️ Could not find qualifying latest invoice for Tenant ${tenant.id} in step 3. Skipping.`);
-                continue;
-            }
-
-
-            const tenantRoom = tenant.Room; // The tenant's room with current costs (fetched in step 2)
-
-            // Calculate the dates for the next invoice
-            const nextPeriodStart = addDays(latestInvoice.periodEnd, 1);
-            const nextPeriodEnd = calculateNextPeriodEnd(latestInvoice.periodEnd); // Use the helper function
-            const nextIssueDate = subDays(nextPeriodStart, DAYS_BEFORE_PERIOD_END_TO_ISSUE_INVOICE); // Issue 7 days before next period end
-            const nextDueDate = addDays(nextPeriodStart, 7); // Due 7 days after next period start
-            const nextBanishDate = addDays(nextPeriodStart, 14); // Banish 14 days after next period start
-
-            // Optional: Check if an invoice for this next period already exists
-            // This is a safeguard against duplicate invoices if the task runs multiple times
-            const existingNextInvoice = await Invoice.findOne({
-                where: {
-                    tenantId: tenant.id,
-                    periodStart: nextPeriodStart,
-                    // Consider status here too, e.g., exclude 'Void' ones
                     status: { [Op.not]: 'Void' }
-                }
+                },
+                order: [['periodEnd', 'DESC']], // Get the absolute latest by periodEnd
             });
 
-            if (existingNextInvoice) {
-                logger.info(`ℹ️ Next invoice for Tenant ${tenant.id} (Period: ${nextPeriodStart.toISOString().split('T')[0]} to ${nextPeriodEnd.toISOString().split('T')[0]}) already exists. Skipping.`);
-                continue; // Skip if the next invoice already exists
+            if (latestExistingInvoice) {
+                // If invoices already exist, start from the day after the latest one
+                const latestPeriodEnd = startOfDay(latestExistingInvoice.periodEnd);
+                currentPeriodStartForInvoice = addDays(latestPeriodEnd, 1);
+                previousPeriodEndForCalculation = latestPeriodEnd;
+                logger.info(`Starting billing for Tenant ${tenant.id} from day after latest invoice period end: ${format(currentPeriodStartForInvoice, 'yyyy-MM-dd')}`);
+            } else {
+                // If no invoices exist for this tenant, start from their original startDate
+                currentPeriodStartForInvoice = startOfDay(tenant.startDate);
+                // For the very first invoice calculation, previousPeriodEnd is conceptually the day before startDate
+                previousPeriodEndForCalculation = subDays(currentPeriodStartForInvoice, 1);
+                logger.info(`Starting billing for Tenant ${tenant.id} from tenant's start date (no existing invoice): ${format(currentPeriodStartForInvoice, 'yyyy-MM-dd')}`);
             }
 
+            // Define the cutoff for generating invoices:
+            // We want to generate invoices for all periods whose *calculated issue date*
+            // is on or before `today` (the date the task is running).
+            const targetIssueDateCutoff = today;
 
-            // Start a transaction for creating the new invoice and its charges
-            const t = await sequelize.transaction();
+            // Loop to generate all necessary invoices (past due and the next one due today)
+            while (true) { // Loop indefinitely until a `break` condition is met internally
+                // Calculate the end date for the current billing period
+                const currentPeriodEnd = calculateNextPeriodEnd(previousPeriodEndForCalculation);
 
-            try {
-                logger.info(`Generating next invoice for Tenant ${tenant.id} (Room ${tenantRoom.roomNumber}) for period: ${nextPeriodStart.toISOString().split('T')[0]} to ${nextPeriodEnd.toISOString().split('T')[0]}`);
+                // Calculate the potential issue date if an invoice were generated for this period
+                const potentialIssueDate = subDays(currentPeriodEnd, DAYS_BEFORE_PERIOD_END_TO_ISSUE_INVOICE);
 
-                // 4. Create the New Invoice header
-                const newInvoice = await Invoice.create({
-                    tenantId: tenant.id,
-                    roomId: tenantRoom.id,
-                    periodStart: nextPeriodStart,
-                    periodEnd: nextPeriodEnd,
-                    issueDate: nextIssueDate,
-                    dueDate: nextDueDate,
-                    banishDate: nextBanishDate,
-                    totalAmountDue: 0, // Calculate below
-                    totalAmountPaid: 0, // Initially 0
-                    status: 'Issued', // Newly generated invoice status
-                    description: `Monthly invoice for room ${tenantRoom.roomNumber} period: ${nextPeriodStart.toISOString().split('T')[0]} to ${nextPeriodEnd.toISOString().split('T')[0]}`,
-                    createBy: 'Automated Billing Task', // Indicate creation source
-                    updateBy: 'Automated Billing Task',
-                }, { transaction: t });
+                // BREAK CONDITION: If the potential issue date for this period is AFTER our `targetIssueDateCutoff` (today),
+                // it means we have generated all necessary past/current invoices and should stop.
+                if (isAfter(potentialIssueDate, targetIssueDateCutoff)) {
+                    logger.debug(`Stopping generation for Tenant ${tenant.id}. Next invoice period starting ${format(currentPeriodStartForInvoice, 'yyyy-MM-dd')} would have an issue date of ${format(potentialIssueDate, 'yyyy-MM-dd')}, which is after today's cutoff (${format(targetIssueDateCutoff, 'yyyy-MM-dd')}).`);
+                    break; // Exit the inner while loop for this tenant
+                }
 
-                // 5. Prepare and create Charge records based on current active costs
-                const chargesToCreate = [];
-                let calculatedTotalAmountDue = 0;
+                // Additional Safeguard: Prevent generating invoices excessively far into the future.
+                // This is a safety net in case of misconfigured dates or unexpected logic.
+                if (isAfter(currentPeriodStartForInvoice, addMonths(today, 3))) {
+                    logger.warn(`⚠️ Safeguard activated: Stopping generation for Tenant ${tenant.id} as current period start (${format(currentPeriodStartForInvoice, 'yyyy-MM-dd')}) is too far into the future (beyond 3 months from today).`);
+                    break;
+                }
 
-                // Charge for the current Active Price
-                if (tenantRoom.Price) { // Price is required in the query, so this should exist
-                    const priceCharge = {
-                        invoiceId: newInvoice.id,
-                        name: tenantRoom.Price.name,
-                        amount: tenantRoom.Price.amount,
-                        description: tenantRoom.Price.description || `Base rent for room ${tenantRoom.roomNumber}`,
-                        transactionType: 'debit',
-                        createBy: 'Automated Billing Task',
+                // Check if an invoice for this specific period already exists (to prevent duplicates)
+                const existingInvoiceForPeriod = await Invoice.findOne({
+                    where: {
+                        tenantId: tenant.id,
+                        periodStart: currentPeriodStartForInvoice,
+                        periodEnd: currentPeriodEnd, // Check both start and end for higher precision
+                        status: { [Op.not]: 'Void' } // Exclude void invoices from this check
+                    }
+                });
+
+                if (existingInvoiceForPeriod) {
+                    logger.info(`ℹ️ Invoice for Tenant ${tenant.id} (Period: ${format(currentPeriodStartForInvoice, 'yyyy-MM-dd')} to ${format(currentPeriodEnd, 'yyyy-MM-dd')}) already exists. Skipping.`);
+                    // Move to the next period for the next iteration of the while loop
+                    previousPeriodEndForCalculation = currentPeriodEnd;
+                    currentPeriodStartForInvoice = addDays(currentPeriodEnd, 1);
+                    continue; // Skip to the next iteration
+                }
+
+                // --- Proceed with creating the new invoice for this period ---
+                const t = await sequelize.transaction();
+
+                try {
+                    const tenantRoom = tenant.Room; // The tenant's room with current costs (fetched initially)
+
+                    // For any invoice generated by this automated task (whether for a past period or the current one),
+                    // the `issueDate` will be the actual date/time the task runs.
+                    // `dueDate` and `banishDate` are calculated relative to the invoice's `periodStart`.
+                    const issueDate = new Date(); // The actual date/time this invoice record is created
+                    const dueDate = addDays(currentPeriodStartForInvoice, 7);
+                    const banishDate = addDays(currentPeriodStartForInvoice, 14);
+
+                    logger.info(`Generating invoice for Tenant ${tenant.id} (Room ${tenantRoom.roomNumber}) for period: ${format(currentPeriodStartForInvoice, 'yyyy-MM-dd')} to ${format(currentPeriodEnd, 'yyyy-MM-dd')}`);
+
+                    // 3. Create the New Invoice header
+                    const newInvoice = await Invoice.create({
+                        tenantId: tenant.id,
+                        roomId: tenantRoom.id,
+                        periodStart: currentPeriodStartForInvoice,
+                        periodEnd: currentPeriodEnd,
+                        issueDate: issueDate, // Set to the current date/time of task execution
+                        dueDate: dueDate,
+                        banishDate: banishDate,
+                        totalAmountDue: 0, // Calculate below
+                        totalAmountPaid: 0, // Initially 0
+                        status: 'Issued', // Newly generated invoice status
+                        description: `Monthly invoice for room ${tenantRoom.roomNumber} period: ${format(currentPeriodStartForInvoice, 'yyyy-MM-dd')} to ${format(currentPeriodEnd, 'yyyy-MM-dd')}`,
+                        createBy: 'Automated Billing Task', // Indicate creation source
                         updateBy: 'Automated Billing Task',
-                    };
-                    chargesToCreate.push(priceCharge);
-                    calculatedTotalAmountDue += priceCharge.amount;
-                }
+                    }, { transaction: t });
 
-                // Charges for current Active Additional Prices
-                if (tenantRoom.AdditionalPrices && tenantRoom.AdditionalPrices.length > 0) {
-                    tenantRoom.AdditionalPrices.forEach(ap => {
-                        const additionalCharge = {
+                    // 4. Prepare and create Charge records based on current active costs
+                    const chargesToCreate = [];
+                    let calculatedTotalAmountDue = 0;
+
+                    // Charge for the current Active Price
+                    if (tenantRoom.Price) { // Price is required in the query, so this should exist
+                        const priceCharge = {
                             invoiceId: newInvoice.id,
-                            name: ap.name || 'Additional Cost',
-                            amount: ap.amount,
-                            description: ap.description || 'Additional charge details',
+                            name: tenantRoom.Price.name,
+                            amount: tenantRoom.Price.amount,
+                            description: tenantRoom.Price.description || `Base rent for room ${tenantRoom.roomNumber}`,
                             transactionType: 'debit',
                             createBy: 'Automated Billing Task',
                             updateBy: 'Automated Billing Task',
                         };
-                        chargesToCreate.push(additionalCharge);
-                        calculatedTotalAmountDue += additionalCharge.amount;
-                    });
+                        chargesToCreate.push(priceCharge);
+                        calculatedTotalAmountDue += priceCharge.amount;
+                    }
+
+                    // Charges for current Active Additional Prices
+                    if (tenantRoom.AdditionalPrices && tenantRoom.AdditionalPrices.length > 0) {
+                        tenantRoom.AdditionalPrices.forEach(ap => {
+                            const additionalCharge = {
+                                invoiceId: newInvoice.id,
+                                name: ap.name || 'Additional Cost',
+                                amount: ap.amount,
+                                description: ap.description || 'Additional charge details',
+                                transactionType: 'debit',
+                                createBy: 'Automated Billing Task',
+                                updateBy: 'Automated Billing Task',
+                            };
+                            chargesToCreate.push(additionalCharge);
+                            calculatedTotalAmountDue += additionalCharge.amount;
+                        });
+                    }
+
+                    // Charges for current Active Other Costs
+                    if (tenantRoom.OtherCosts && tenantRoom.OtherCosts.length > 0) {
+                        tenantRoom.OtherCosts.forEach(oc => {
+                            const otherCharge = {
+                                invoiceId: newInvoice.id,
+                                name: oc.name || 'Other Cost',
+                                amount: oc.amount,
+                                description: oc.description || 'Other cost details',
+                                transactionType: 'debit',
+                                createBy: 'Automated Billing Task',
+                                updateBy: 'Automated Billing Task',
+                            };
+                            chargesToCreate.push(otherCharge);
+                            calculatedTotalAmountDue += otherCharge.amount;
+                        });
+                    }
+
+                    // Create all prepared Charge records in bulk
+                    if (chargesToCreate.length > 0) {
+                        await Charge.bulkCreate(chargesToCreate, { transaction: t });
+                    }
+
+                    // 5. Update the totalAmountDue on the New Invoice record
+                    await newInvoice.update({ totalAmountDue: calculatedTotalAmountDue }, { transaction: t });
+
+                    // Commit the transaction for this tenant's invoice
+                    await t.commit();
+                    logger.info(`✅ Successfully generated invoice ${newInvoice.id} for Tenant ${tenant.id} for period ${format(currentPeriodStartForInvoice, 'yyyy-MM-dd')} to ${format(currentPeriodEnd, 'yyyy-MM-dd')}.`);
+
+                } catch (innerError) {
+                    // If an error occurs for a single tenant, rollback their transaction
+                    if (t && !t.finished) { // Check if transaction is still active
+                        try {
+                            await t.rollback();
+                        } catch (rollbackError) {
+                            logger.error(`Rollback failed for Tenant ${tenant.id} and period ${format(currentPeriodStartForInvoice, 'yyyy-MM-dd')}: ${rollbackError.message}`);
+                        }
+                    }
+                    logger.error(`❌ Error generating invoice for Tenant ${tenant.id} for period ${format(currentPeriodStartForInvoice, 'yyyy-MM-dd')} to ${format(currentPeriodEnd, 'yyyy-MM-dd')}: ${innerError.message}`);
+                    logger.error(innerError.stack);
+                    // It's usually fine to continue to the next period/tenant even if one fails
                 }
-
-                // Charges for current Active Other Costs
-                if (tenantRoom.OtherCosts && tenantRoom.OtherCosts.length > 0) {
-                    tenantRoom.OtherCosts.forEach(oc => {
-                        const otherCharge = {
-                            invoiceId: newInvoice.id,
-                            name: oc.name || 'Other Cost',
-                            amount: oc.amount,
-                            description: oc.description || 'Other cost details',
-                            transactionType: 'debit',
-                            createBy: 'Automated Billing Task',
-                            updateBy: 'Automated Billing Task',
-                        };
-                        chargesToCreate.push(otherCharge);
-                        calculatedTotalAmountDue += otherCharge.amount;
-                    });
-                }
-
-                // Create all prepared Charge records in bulk
-                if (chargesToCreate.length > 0) {
-                    await Charge.bulkCreate(chargesToCreate, { transaction: t });
-                }
-
-                // 6. Update the totalAmountDue on the New Invoice record
-                await newInvoice.update({ totalAmountDue: calculatedTotalAmountDue }, { transaction: t });
-
-                // Commit the transaction for this tenant's invoice
-                await t.commit();
-                logger.info(`✅ Successfully generated invoice ${newInvoice.id} for Tenant ${tenant.id}.`);
-
-            } catch (innerError) {
-                // If an error occurs for a single tenant, rollback their transaction
-                await t.rollback();
-                logger.error(`❌ Error generating invoice for Tenant ${tenant.id}: ${innerError.message}`);
-                logger.error(innerError.stack);
-                // Continue to the next tenant even if one fails
-            }
-        }
-
-        logger.info('📅 Monthly invoice generation task completed.');
+                // Important: Move to the next period for the next iteration of the while loop
+                previousPeriodEndForCalculation = currentPeriodEnd;
+                currentPeriodStartForInvoice = addDays(currentPeriodEnd, 1);
+            } // End of while loop
+        } // End of for loop
+        logger.info('📅 Monthly invoice generation task completed for all active tenants.');
 
     } catch (error) {
-        // Handle errors in the main query or iteration setup
-        logger.error(`❌ Error in monthly invoice generation task: ${error.message}`);
+        // Handle errors in the main query or overall task setup
+        logger.error(`❌ Critical Error in monthly invoice generation task: ${error.message}`);
         logger.error(error.stack);
     }
 };
@@ -380,17 +385,17 @@ const startBillingTask = () => {
     });
     logger.debug('🔥 Debug Log: node-schedule job scheduled successfully.');
 
-    // const nextInvocation = billingJob.nextInvocation();
-    // if (nextInvocation) {
-    //     logger.info(`📅 Next node-schedule trigger invocation: ${nextInvocation.toISOString()}`);
-    // } else {
-    //     logger.warn('📅 No next node-schedule trigger invocation found.');
-    // }
-    // logger.info('🔥 Simple scheduled billing task started.');
+    const nextInvocation = billingJob.nextInvocation();
+    if (nextInvocation) {
+        logger.info(`📅 Next node-schedule trigger invocation: ${nextInvocation.toISOString()}`);
+    } else {
+        logger.warn('📅 No next node-schedule trigger invocation found.');
+    }
+    logger.info('🔥 Simple scheduled billing task started.');
 };
 
 // Export the function to start the task
 module.exports = {
     startBillingTask,
-    // generateMonthlyInvoices // Exported for manual testing if needed
+    // generateMonthlyInvoices // You can export this for manual testing if needed
 };
