@@ -8,7 +8,10 @@ const {
     // createTransaction,
     // updateTransaction,
     // deleteTransaction,
-    recordPayment
+    recordPayment,
+    deleteTransaction,
+    getAllCharges,
+    deleteCharge
 } = require('../controllers/transactionController');
 
 router.get('/', authMiddleware, getAllTransactions);
@@ -22,6 +25,9 @@ router.get('/:id', authMiddleware, getTransactionById);
 // router.post('/', upload.single('paymentProof'), imageCompressor, transactionController.recordPayment);
 // If not using middleware for upload (path is sent in body):
 router.post('/', authMiddleware, recordPayment);
+router.delete('/:id', authMiddleware, deleteTransaction);
+router.post('/charges/', authMiddleware,  getAllCharges);
+router.post('/remCharge/', authMiddleware,  deleteCharge);
 
 
 

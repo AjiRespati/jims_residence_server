@@ -244,3 +244,50 @@ exports.getTransactionById = async (req, res) => {
         res.status(500).json({ error: 'Internal Server Error' });
     }
 };
+
+exports.deleteTransaction = async (req, res) => {
+    try {
+        const data = await Transaction.findByPk(req.params.id);
+        if (!data) return res.status(404).json({ error: 'Transaction not found' });
+
+        await data.destroy();
+        res.json({ message: 'Transaction deleted successfully' });
+    } catch (error) {
+        logger.error(`❌ deleteTransaction error: ${error.message}`);
+        logger.error(error.stack);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+}
+
+exports.getAllCharges = async (req, res) => {
+    try {
+        // Optional: Implement filtering, pagination, sorting
+        const charges = await Charge.findAll();
+
+        res.status(200).json({
+            success: true,
+            message: 'Charges retrieved successfully',
+            data: charges
+        });
+
+    } catch (error) {
+        logger.error(`❌ getAllTransactions error: ${error.message}`);
+        logger.error(error.stack);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+exports.deleteCharge = async (req, res) => {
+    try {
+        const { id } = req.body;
+        const data = await Charge.findByPk(id);
+        if (!data) return res.status(404).json({ error: 'Charge not found' });
+
+        await data.destroy();
+        res.json({ message: 'Charge deleted successfully' });
+    } catch (error) {
+        logger.error(`❌ deleteCharge error: ${error.message}`);
+        logger.error(error.stack);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+}
