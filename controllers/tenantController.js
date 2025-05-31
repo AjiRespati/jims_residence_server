@@ -10,7 +10,7 @@ const logger = require('../config/logger');
 const path = require("path");
 const fs = require("fs");
 const {
-    subDays, addMonths, endOfMonth, isLastDayOfMonth
+    subDays, addMonths, endOfMonth, isLastDayOfMonth, startOfDay, format
 } = require('date-fns');
 
 
@@ -18,20 +18,20 @@ const {
 const deleteFile = (filePath, logPrefix = 'File') => {
     const fullPath = path.join(__dirname, '..', filePath);
     if (!filePath || filePath === '/' || filePath.startsWith('..')) {
-         logger.warn(`⚠️ Attempted to delete invalid file path: ${filePath}`);
-         return;
+        logger.warn(`⚠️ Attempted to delete invalid file path: ${filePath}`);
+        return;
     }
 
-     fs.access(fullPath, fs.constants.F_OK, (err) => {
+    fs.access(fullPath, fs.constants.F_OK, (err) => {
         if (err) {
             logger.warn(`⚠️ ${logPrefix} file not found for deletion: ${fullPath}`);
         } else {
-             fs.unlink(fullPath, (err) => {
-                 if (err) logger.error(`❌ Error deleting ${logPrefix} file: ${fullPath}`, err);
-                 else logger.info(`🗑️ Deleted ${logPrefix} file: ${fullPath}`);
-             });
+            fs.unlink(fullPath, (err) => {
+                if (err) logger.error(`❌ Error deleting ${logPrefix} file: ${fullPath}`, err);
+                else logger.info(`🗑️ Deleted ${logPrefix} file: ${fullPath}`);
+            });
         }
-     });
+    });
 };
 
 
@@ -41,7 +41,7 @@ exports.getAllTenants = async (req, res) => {
         const { boardingHouseId, dateFrom, dateTo } = req.query;
 
         // Prepare the where clause for the main Tenant query
-        const tenantWhere = {};
+        const tenantWhere = { tenancyStatus: 'Active' };
         let isDateFilterApplied = false;
 
         // Add date filter if dateFrom and dateTo are provided and valid
@@ -315,10 +315,12 @@ exports.getTenantById = async (req, res) => {
         const tenantData = tenant.toJSON();
 
         // Extract roomNumber and boardingHouseName from nested objects
+        const roomId = tenantData.Room ? tenantData.Room.id : null;
         const roomNumber = tenantData.Room ? tenantData.Room.roomNumber : null;
         const boardingHouseName = (tenantData.Room && tenantData.Room.BoardingHouse) ? tenantData.Room.BoardingHouse.name : null;
 
         // Add roomNumber and boardingHouseName as top-level properties
+        tenantData.roomId = roomId;
         tenantData.roomNumber = roomNumber;
         tenantData.boardingHouseName = boardingHouseName;
 
@@ -677,5 +679,125 @@ exports.deleteTenant = async (req, res) => {
         logger.error(`❌ deleteTenant error: ${error.message}`);
         logger.error(error.stack);
         res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+exports.tenantCheckout = async (req, res) => {
+    const tenantId = req.params.id; // Assuming tenantId comes from URL params, e.g., /api/tenants/:id/checkout
+    const checkoutDate = startOfDay(new Date()); // Checkout is handled as 'today' based on the request
+
+    let transaction; // Declare transaction variable
+    try {
+        transaction = await sequelize.transaction(); // Start a new transaction
+
+        // 1. Find the Tenant and their associated Room
+        const tenant = await Tenant.findByPk(tenantId, {
+            include: [
+                {
+                    model: Room, // Ensure Room is associated in your models
+                    attributes: ['id', 'roomNumber', 'roomStatus'], // Include the correct attribute name: 'roomStatus'
+                },
+            ],
+            transaction, // Pass transaction to the find operation
+        });
+
+        if (!tenant) {
+            await transaction.rollback(); // Rollback if tenant not found
+            return res.status(404).json({ message: 'Tenant not found.' });
+        }
+
+        // Check if the tenant is currently active
+        if (tenant.tenancyStatus !== 'Active') {
+            await transaction.rollback(); // Rollback if tenant not active
+            return res.status(400).json({ message: `Tenant ${tenant.name} is not currently active (status: ${tenant.tenancyStatus}). Cannot proceed with checkout.` });
+        }
+
+        const room = tenant.Room; // Access the associated room
+        if (!room) {
+            await transaction.rollback(); // Rollback if room not found (shouldn't happen for an active tenant)
+            return res.status(400).json({ message: `Tenant ${tenant.name} is not assigned to any room. Cannot proceed with checkout.` });
+        }
+
+        logger.info(`Attempting basic checkout for Tenant ${tenant.id} (${tenant.name}) from Room ${room.roomNumber}.`);
+
+        // 2. IMPORTANT: Check for unpaid invoices BEFORE proceeding with status changes
+        const unpaidInvoices = await Invoice.findAll({
+            where: {
+                tenantId: tenant.id,
+                // Assuming 'Paid' and 'Void' are statuses that mean the invoice is no longer unpaid
+                status: {
+                    [Op.notIn]: ['Paid', 'Void'],
+                },
+            },
+            attributes: ['id', 'totalAmountDue', 'totalAmountPaid', 'status', 'periodStart', 'periodEnd', 'issueDate', 'dueDate'], // Select relevant fields
+            transaction, // Pass transaction to the find operation
+        });
+
+        if (unpaidInvoices.length > 0) {
+            await transaction.rollback(); // Rollback if unpaid invoices exist
+            logger.warn(`❌ Checkout denied for Tenant ${tenant.id}: ${unpaidInvoices.length} outstanding invoices found.`);
+            return res.status(400).json({
+                message: 'Ada tagihan belum dibayar. Harap lunasi tagihan anda.',
+                unpaidInvoices: unpaidInvoices.map(inv => ({
+                    id: inv.id,
+                    period: `${format(inv.periodStart, 'yyyy-MM-dd')} to ${format(inv.periodEnd, 'yyyy-MM-dd')}`,
+                    amountDue: parseFloat(inv.totalAmountDue),
+                    amountPaid: parseFloat(inv.totalAmountPaid),
+                    balance: parseFloat(inv.totalAmountDue) - parseFloat(inv.totalAmountPaid),
+                    status: inv.status,
+                    issueDate: format(inv.issueDate, 'yyyy-MM-dd'),
+                    dueDate: format(inv.dueDate, 'yyyy-MM-dd'),
+                })),
+            });
+        }
+        logger.info(`Tenant ${tenant.id} has no outstanding unpaid invoices. Proceeding with checkout.`);
+
+
+        // 3. Change Tenant's tenancyStatus to "Inactive" and set checkoutDate
+        await tenant.update(
+            {
+                tenancyStatus: 'Inactive',
+                checkoutDate: checkoutDate, // Set the checkout date to today
+                updateBy: req.user ? req.user.name : 'System/Admin Checkout', // Assuming req.user from auth middleware
+            },
+            { transaction } // Pass transaction to the update operation
+        );
+        logger.info(`Tenant ${tenant.id} status updated to 'Inactive'.`);
+
+        // 4. Change related Room's status to "Tersedia"
+        await room.update(
+            {
+                roomStatus: 'Tersedia', // This is the corrected attribute name
+                updateBy: req.user ? req.user.name : 'System/Admin Checkout',
+            },
+            { transaction } // Pass transaction to the update operation
+        );
+        logger.info(`Room ${room.id} (${room.roomNumber}) roomStatus updated to 'Tersedia'.`);
+
+        await transaction.commit(); // Commit the transaction if all operations succeed
+
+        return res.status(200).json({
+            message: 'Tenant checkout processed successfully. No outstanding invoices found.',
+            tenant: {
+                id: tenant.id,
+                name: tenant.name,
+                tenancyStatus: tenant.tenancyStatus, // Will be 'Inactive'
+                checkoutDate: tenant.checkoutDate,
+            },
+            room: {
+                id: room.id,
+                roomNumber: room.roomNumber,
+                roomStatus: room.roomStatus, // Will be 'Tersedia'
+            },
+            // No unpaidInvoices list here because if successful, there are none.
+        });
+
+    } catch (error) {
+        if (transaction) {
+            await transaction.rollback(); // Rollback if any error occurs
+        }
+        logger.error(`❌ Error during tenant checkout for tenant ${tenantId}: ${error.message}`);
+        logger.error(error.stack); // Log the full stack trace for debugging
+        return res.status(500).json({ message: 'Failed to process tenant checkout.', error: error.message });
     }
 };

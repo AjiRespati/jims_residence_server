@@ -12,10 +12,7 @@ const { Op } = Sequelize;
 // Keep date-fns functions for date calculations (addDays, subDays, etc.)
 const { addDays, subDays, addMonths, endOfMonth, isLastDayOfMonth, isBefore, isAfter, startOfDay, format, isEqual } = require('date-fns');
 
-// Use moment and moment-timezone for the time check
-logger.debug('🔥 Debug Log: Attempting to import moment-timezone...');
 const moment = require('moment-timezone');
-logger.debug('🔥 Debug Log: moment-timezone imported successfully.');
 
 const { Tenant, Invoice, Charge, Room, Price, AdditionalPrice, OtherCost } = require('../models'); // Import all necessary models
 
@@ -35,7 +32,8 @@ const APP_TIMEZONE = "Asia/Jakarta"; // Use the timezone you intend for the task
 
 // 🔥 CRITICAL: Enhanced global unhandled error handlers to get full stack trace
 process.on('uncaughtException', (err) => {
-    logger.error('❌ Uncaught Exception:', err.message);
+    logger.error('❌ Uncaught Exception:');
+    logger.error(err.message);
     logger.error(err.stack); // Log the full stack trace
     // It's often recommended to exit the process after an uncaught exception
     // to prevent the application from being in an unstable state.
@@ -44,15 +42,19 @@ process.on('uncaughtException', (err) => {
 
 process.on('unhandledRejection', (reason, promise) => {
     // Log the reason as an error object, which should include the stack trace
-    logger.error('❌ Unhandled Rejection at Promise:', promise);
-    logger.error('Reason:', reason); // This will attempt to log the full object
+    logger.error('❌ Unhandled Rejection at Promise:');
+    logger.error(promise);
+    logger.error('Reason:');
+    logger.error(reason); // This will attempt to log the full object
 
     if (reason instanceof Error) {
         logger.error('Reason (Error message):', reason.message);
         logger.error('Reason (Error stack):', reason.stack); // This is what we need!
+        logger.error(reason.stack); // This is what we need!
     } else {
         // Fallback for non-Error rejections (e.g., a string or number)
-        logger.error('Reason (Non-Error):', JSON.stringify(reason, null, 2)); // Stringify for better readability
+        logger.error('Reason (Non-Error):'); // Stringify for better readability
+        logger.error(JSON.stringify(reason, null, 2)); // Stringify for better readability
     }
     // Handle the rejection, e.g., log it and decide whether to exit
 });
@@ -105,6 +107,7 @@ const isTimeToRunBilling = () => {
 
     } catch (error) {
         logger.error(`❌ Error checking if it's time to run billing: ${error.message}`);
+        logger.error(error.message);
         // If an error occurs checking the time, better not to run the billing task
         return false;
     }
@@ -115,11 +118,11 @@ const isTimeToRunBilling = () => {
 // This function is triggered frequently by node-schedule, but the logic
 // only runs at the intended time based on the internal check.
 const generateMonthlyInvoices = async () => {
-    logger.debug('🔥 Debug Log: generateMonthlyInvoices function started.');
+    // logger.debug('🔥 Debug Log: generateMonthlyInvoices function started.');
 
     // Add the time check back here
     if (!isTimeToRunBilling()) {
-        logger.debug('🔥 Debug Log: Skipping main billing logic as it is not the scheduled time.');
+        // logger.debug('🔥 Debug Log: Skipping main billing logic as it is not the scheduled time.');
         return; // Exit if it's not the intended time to run the main logic
     }
 
@@ -154,8 +157,11 @@ const generateMonthlyInvoices = async () => {
                         {
                             model: OtherCost,
                             attributes: ['id', 'name', 'amount', 'description'],
-                            where: { status: 'active' },
-                            required: false
+                            where: {
+                                status: 'active', // Only include 'active' OtherCosts
+                                isOneTime: false // >>> IMPORTANT: Exclude one-time costs <<<
+                            },
+                            required: false // Don't require other costs
                         }
                     ]
                 }
@@ -275,7 +281,7 @@ const generateMonthlyInvoices = async () => {
                         totalAmountDue: 0, // Calculate below
                         totalAmountPaid: 0, // Initially 0
                         status: 'Issued', // Newly generated invoice status
-                        description: `Monthly invoice for room ${tenantRoom.roomNumber} period: ${format(currentPeriodStartForInvoice, 'yyyy-MM-dd')} to ${format(currentPeriodEnd, 'yyyy-MM-dd')}`,
+                        description: `Tagihan untuk kamar ${tenantRoom.roomNumber}\nPeriode: ${format(currentPeriodStartForInvoice, 'yyyy-MM-dd')} to ${format(currentPeriodEnd, 'yyyy-MM-dd')}`,
                         createBy: 'Automated Billing Task', // Indicate creation source
                         updateBy: 'Automated Billing Task',
                     }, { transaction: t });
@@ -290,7 +296,7 @@ const generateMonthlyInvoices = async () => {
                             invoiceId: newInvoice.id,
                             name: tenantRoom.Price.name,
                             amount: tenantRoom.Price.amount,
-                            description: tenantRoom.Price.description || `Base rent for room ${tenantRoom.roomNumber}`,
+                            description: tenantRoom.Price.description || `Sewa kamar ${tenantRoom.roomNumber}`,
                             transactionType: 'debit',
                             createBy: 'Automated Billing Task',
                             updateBy: 'Automated Billing Task',

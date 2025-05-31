@@ -12,13 +12,13 @@ module.exports = (sequelize, DataTypes) => {
         dueDate: { type: DataTypes.DATE },
         banishDate: { type: DataTypes.DATE },
         endDate: { type: DataTypes.DATE },
+        checkoutDate: { type: DataTypes.DATE },
         createBy: { type: DataTypes.STRING },
         updateBy: { type: DataTypes.STRING }
     }, { timestamps: true });
 
     Tenant.associate = (models) => {
         Tenant.belongsTo(models.Room, { foreignKey: "roomId" });
-        // Tenant.hasMany(models.Payment, { foreignKey: "tenantId" });
         Tenant.hasMany(models.Invoice, { foreignKey: "tenantId" });
     };
 
