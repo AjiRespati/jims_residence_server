@@ -432,7 +432,8 @@ exports.getFinancialTransactions = async (req, res) => {
         console.log("REQUEST QUERY: ", req.query);
         console.log("BOARDING HOUSE: ", boardingHouseId);
 
-        let dateFilter = {};
+        let invDateFilter = {};
+        let expDateFilter = {};
         if (dateFrom && dateTo) {
             const startDate = new Date(dateFrom);
             const endDate = new Date(dateTo);
@@ -442,7 +443,13 @@ exports.getFinancialTransactions = async (req, res) => {
                 return res.status(400).json({ message: 'Invalid date format for dateFrom or dateTo.' });
             }
 
-            dateFilter = {
+            invDateFilter = {
+                issueDate: {
+                    [Op.between]: [startDate, endDate]
+                }
+            };
+
+            expDateFilter = {
                 createdAt: {
                     [Op.between]: [startDate, endDate]
                 }
@@ -488,7 +495,7 @@ exports.getFinancialTransactions = async (req, res) => {
                 }
             ],
             where: {
-                ...dateFilter, // Apply date filter to Invoice's createdAt
+                ...invDateFilter, // Apply date filter to Invoice's createdAt
                 // You might want to filter invoices based on status if needed, e.g.,
                 status: { [Op.not]: ['Draft', 'Void', 'Unpaid', 'Issued'] },
             },
@@ -544,7 +551,7 @@ exports.getFinancialTransactions = async (req, res) => {
                 }
             ],
             where: {
-                ...dateFilter, // Apply date filter to Invoice's createdAt
+                ...expDateFilter, // Apply date filter to Invoice's createdAt
             },
             order: [['expenseDate', 'DESC']],
             raw: true,
