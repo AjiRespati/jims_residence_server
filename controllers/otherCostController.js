@@ -111,7 +111,7 @@ exports.createOtherCost = async (req, res) => {
                 totalAmountDue: parseFloat(amount), // Only this OtherCost's amount
                 totalAmountPaid: 0,
                 status: 'Issued', // Or 'Due'
-                description: `Ad-hoc Invoice for ${name} (Room ${room.roomNumber})`,
+                description: `Invoice for ${name} (Room ${room.roomNumber})`,
                 createBy: req.user ? req.user.name : 'System/Admin',
                 updateBy: req.user ? req.user.name : 'System/Admin',
             }, { transaction });
@@ -131,7 +131,7 @@ exports.createOtherCost = async (req, res) => {
             await newOtherCost.update({ invoiceId: newInvoice.id }, { transaction });
 
             await transaction.commit();
-            return res.status(201).json({
+            return res.status(200).json({
                 message: 'One-time OtherCost created and invoiced successfully.',
                 otherCost: newOtherCost,
                 invoice: newInvoice

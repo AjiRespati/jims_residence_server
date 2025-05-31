@@ -219,9 +219,9 @@ exports.getMonthlyFinancialReport = async (req, res) => {
 
         res.status(200).json({
             success: true,
-            message: boardingHouseId ?
-                `Monthly financial report for Boarding House ID: ${boardingHouseId} for ${monthInt}/${yearInt} generated successfully` :
-                `Monthly financial report for all boarding houses for ${monthInt}/${yearInt} generated successfully`,
+            message: boardingHouseId
+                ? `Monthly financial report for Boarding House ID: ${boardingHouseId} for ${monthInt}/${yearInt} generated successfully`
+                : `Monthly financial report for all boarding houses for ${monthInt}/${yearInt} generated successfully`,
             data: reportDataList // Return the list of report data objects
         });
 
@@ -546,7 +546,7 @@ exports.getFinancialTransactions = async (req, res) => {
             where: {
                 ...dateFilter, // Apply date filter to Invoice's createdAt
             },
-            order: [['expenseDate', 'DESC']], 
+            order: [['expenseDate', 'DESC']],
             raw: true,
             nest: true
         });
