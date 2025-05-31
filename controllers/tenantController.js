@@ -315,10 +315,12 @@ exports.getTenantById = async (req, res) => {
         const tenantData = tenant.toJSON();
 
         // Extract roomNumber and boardingHouseName from nested objects
+        const roomId = tenantData.Room ? tenantData.Room.id : null;
         const roomNumber = tenantData.Room ? tenantData.Room.roomNumber : null;
         const boardingHouseName = (tenantData.Room && tenantData.Room.BoardingHouse) ? tenantData.Room.BoardingHouse.name : null;
 
         // Add roomNumber and boardingHouseName as top-level properties
+        tenantData.roomId = roomId;
         tenantData.roomNumber = roomNumber;
         tenantData.boardingHouseName = boardingHouseName;
 
