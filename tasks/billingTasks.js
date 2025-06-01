@@ -347,6 +347,17 @@ const generateMonthlyInvoices = async () => {
                     // 5. Update the totalAmountDue on the New Invoice record
                     await newInvoice.update({ totalAmountDue: calculatedTotalAmountDue }, { transaction: t });
 
+                    // --- NEW ADJUSTMENT STARTS HERE ---
+                    // Update the tenant's startDate and endDate to reflect the period of the newly created invoice
+                    await tenant.update({
+                        startDate: newInvoice.periodStart,
+                        endDate: newInvoice.periodEnd,
+                        updateBy: 'System/Automated Billing' // Or req.user.username if this task can be manually triggered
+                    }, { transaction: t });
+
+                    logger.info(`Tenant ${tenant.name} (${tenant.id})'s startDate and endDate updated to reflect new invoice period (${format(newInvoice.periodStart, 'yyyy-MM-dd')} to ${format(newInvoice.periodEnd, 'yyyy-MM-dd')}).`);
+                    // --- NEW ADJUSTMENT ENDS HERE ---
+
                     // Commit the transaction for this tenant's invoice
                     await t.commit();
                     logger.info(`✅ Successfully generated invoice ${newInvoice.id} for Tenant ${tenant.id} for period ${format(currentPeriodStartForInvoice, 'yyyy-MM-dd')} to ${format(currentPeriodEnd, 'yyyy-MM-dd')}.`);
