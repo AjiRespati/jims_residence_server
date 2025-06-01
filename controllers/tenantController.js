@@ -41,51 +41,56 @@ exports.getAllTenants = async (req, res) => {
         const { boardingHouseId, dateFrom, dateTo } = req.query;
 
         // Prepare the where clause for the main Tenant query
-        const tenantWhere = { tenancyStatus: 'Active' };
+        // Add checkoutDate: null here to filter out checked-out tenants
+        const tenantWhere = {
+            tenancyStatus: 'Active',
+            checkoutDate: null // <--- ADDED THIS LINE
+        };
         let isDateFilterApplied = false;
 
-        // Add date filter if dateFrom and dateTo are provided and valid
-        if (dateFrom && dateTo) {
-            const fromDate = new Date(dateFrom);
-            const toDate = new Date(dateTo);
+        // // Add date filter if dateFrom and dateTo are provided and valid
+        // if (dateFrom && dateTo) {
+        //     const fromDate = new Date(dateFrom);
+        //     const toDate = new Date(dateTo);
 
-            if (!isNaN(fromDate.getTime()) && !isNaN(toDate.getTime())) {
-                // Adjust toDate to include the entire end day
-                toDate.setHours(23, 59, 59, 999);
+        //     if (!isNaN(fromDate.getTime()) && !isNaN(toDate.getTime())) {
+        //         // Adjust toDate to include the entire end day
+        //         toDate.setHours(23, 59, 59, 999);
 
-                tenantWhere.startDate = { // 🔥 Filtering by Tenant's startDate
-                    [Op.between]: [fromDate, toDate]
-                };
-                isDateFilterApplied = true;
-            } else {
-                // Handle invalid date formats
-                return res.status(400).json({
-                    success: false,
-                    message: 'Invalid date format for dateFrom or dateTo. Use YYYY-MM-DD.',
-                    data: null
-                });
-            }
-        } else if (dateFrom) {
-            // Handle only dateFrom provided
-            const fromDate = new Date(dateFrom);
-            if (!isNaN(fromDate.getTime())) {
-                tenantWhere.startDate = { // 🔥 Filtering by Tenant's startDate
-                    [Op.gte]: fromDate
-                };
-                isDateFilterApplied = true;
-            } else {
-                return res.status(400).json({
-                    success: false,
-                    message: 'Invalid date format for dateFrom. Use YYYY-MM-DD.',
-                    data: null
-                });
-            }
-        } else if (dateTo) {
+        //         tenantWhere.startDate = { // Filtering by Tenant's startDate
+        //             [Op.between]: [fromDate, toDate]
+        //         };
+        //         isDateFilterApplied = true;
+        //     } else {
+        //         // Handle invalid date formats
+        //         return res.status(400).json({
+        //             success: false,
+        //             message: 'Invalid date format for dateFrom or dateTo. Use YYYY-MM-DD.',
+        //             data: null
+        //         });
+        //     }
+        // } else if (dateFrom) {
+        //     // Handle only dateFrom provided
+        //     const fromDate = new Date(dateFrom);
+        //     if (!isNaN(fromDate.getTime())) {
+        //         tenantWhere.startDate = { // Filtering by Tenant's startDate
+        //             [Op.gte]: fromDate
+        //         };
+        //         isDateFilterApplied = true;
+        //     } else {
+        //         return res.status(400).json({
+        //             success: false,
+        //             message: 'Invalid date format for dateFrom. Use YYYY-MM-DD.',
+        //             data: null
+        //         });
+        //     }
+        // } else 
+        if (dateTo) {
             // Handle only dateTo provided
             const toDate = new Date(dateTo);
             if (!isNaN(toDate.getTime())) {
                 toDate.setHours(23, 59, 59, 999); // Include the entire end day
-                tenantWhere.startDate = { // 🔥 Filtering by Tenant's startDate
+                tenantWhere.startDate = { // Filtering by Tenant's startDate
                     [Op.lte]: toDate
                 };
                 isDateFilterApplied = true;
@@ -126,7 +131,7 @@ exports.getAllTenants = async (req, res) => {
 
         // Find all tenants and include specified associated data
         const tenants = await Tenant.findAll({
-            where: tenantWhere, // 🔥 Apply the date filter to the main query
+            where: tenantWhere, // Apply the combined filters to the main query
             attributes: [
                 'id',
                 'name',
@@ -137,6 +142,7 @@ exports.getAllTenants = async (req, res) => {
                 'endDate',
                 'dueDate',
                 'banishDate',
+                'checkoutDate', // <--- IMPORTANT: Include checkoutDate in attributes so you can see it
                 'createBy',
                 'updateBy',
                 'NIKImagePath',
@@ -151,9 +157,9 @@ exports.getAllTenants = async (req, res) => {
                         'totalAmountDue', 'totalAmountPaid', 'status', 'description'
                     ],
                     where: {
-                        status: ['Issued', 'Unpaid', 'PartiallyPaid']
+                        status: ['Issued', 'Unpaid', 'PartiallyPaid'] // Filter for outstanding invoices
                     },
-                    required: false,
+                    required: false, // Use false to get all tenants even if they have no outstanding invoices matching this criteria
                     order: [['dueDate', 'ASC']],
                     include: [
                         {
@@ -164,7 +170,8 @@ exports.getAllTenants = async (req, res) => {
                         }
                     ]
                 }
-            ]
+            ],
+            order: [['createdAt', 'DESC']] // Order tenants, e.g., by most recently created
         });
 
         // Flatten the response structure
@@ -187,13 +194,13 @@ exports.getAllTenants = async (req, res) => {
             return tenantData;
         });
 
-        let message = 'Tenants retrieved successfully with outstanding invoices, room number, and boarding house name';
+        let message = 'Tenants retrieved successfully with outstanding invoices, room number, and boarding house name.';
         if (isBoardingHouseFilterApplied && isDateFilterApplied) {
-            message = `Tenants retrieved successfully for Boarding House ID: ${boardingHouseId} and start date range: ${dateFrom} to ${dateTo}`;
+            message = `Tenants retrieved successfully for Boarding House ID: ${boardingHouseId} and start date range: ${dateFrom} to ${dateTo}.`;
         } else if (isBoardingHouseFilterApplied) {
-            message = `Tenants retrieved successfully for Boarding House ID: ${boardingHouseId}`;
+            message = `Tenants retrieved successfully for Boarding House ID: ${boardingHouseId}.`;
         } else if (isDateFilterApplied) {
-            message = `Tenants retrieved successfully for start date range: ${dateFrom} to ${dateTo}`;
+            message = `Tenants retrieved successfully for start date range: ${dateFrom} to ${dateTo}.`;
         }
 
 
@@ -206,7 +213,7 @@ exports.getAllTenants = async (req, res) => {
     } catch (error) {
         logger.error(`❌ getAllTenants error: ${error.message}`);
         logger.error(error.stack);
-        res.status(500).json({ error: 'Internal Server Error' });
+        res.status(500).json({ success: false, message: 'Internal Server Error', error: error.message });
     }
 };
 
@@ -350,13 +357,15 @@ exports.createTenant = async (req, res) => {
 
         const {
             roomId, name, phone, NIKNumber,
-            startDate, dueDate, banishDate,
+            // startDate will now represent the check-in date
+            startDate: checkinDateRaw, // Rename incoming startDate to checkinDateRaw
+            dueDate, banishDate,
             NIKImagePath, isNIKCopyDone, tenancyStatus,
             priceAmount, priceName, priceDescription, priceRoomSize,
             additionalPrices, otherCosts
         } = req.body;
 
-        if (!roomId || !name || !phone || !NIKNumber || !startDate || !dueDate || priceAmount === undefined || priceAmount === null) {
+        if (!roomId || !name || !phone || !NIKNumber || !checkinDateRaw || !dueDate || priceAmount === undefined || priceAmount === null) {
             await t.rollback();
             return res.status(400).json({ message: 'Required fields are missing' });
         }
@@ -366,11 +375,12 @@ exports.createTenant = async (req, res) => {
             return res.status(400).json({ message: 'priceAmount must be a non-negative number' });
         }
 
-        const tenantStartDate = new Date(startDate);
+        // Parse the check-in date
+        const checkinDate = new Date(checkinDateRaw);
         const invoiceDueDate = new Date(dueDate);
         let invoiceBanishDate = banishDate ? new Date(banishDate) : null;
 
-        if (isNaN(tenantStartDate.getTime()) || isNaN(invoiceDueDate.getTime()) || (banishDate && isNaN(invoiceBanishDate.getTime()))) {
+        if (isNaN(checkinDate.getTime()) || isNaN(invoiceDueDate.getTime()) || (banishDate && isNaN(invoiceBanishDate.getTime()))) {
             await t.rollback();
             return res.status(400).json({ message: 'Invalid date format' });
         }
@@ -381,6 +391,7 @@ exports.createTenant = async (req, res) => {
             return res.status(404).json({ message: 'Room not found.' });
         }
 
+        // Create the main price for the room
         const newPrice = await Price.create({
             boardingHouseId: room.boardingHouseId,
             roomSize: priceRoomSize || 'Standard',
@@ -392,8 +403,10 @@ exports.createTenant = async (req, res) => {
             status: 'active'
         }, { transaction: t });
 
-        await room.update({ priceId: newPrice.id, updateBy: req.user.username, roomStatus: 'Dipesan' }, { transaction: t });
+        // Update room with new price and status
+        await room.update({ priceId: newPrice.id, updateBy: req.user.username, roomStatus: 'Terisi' }, { transaction: t }); // Changed to 'Terisi' as tenant is created
 
+        // Create additional prices if provided
         let createdAdditionalPrices = [];
         if (Array.isArray(additionalPrices) && additionalPrices.length > 0) {
             createdAdditionalPrices = await AdditionalPrice.bulkCreate(
@@ -410,6 +423,7 @@ exports.createTenant = async (req, res) => {
             );
         }
 
+        // Create other costs if provided
         let createdOtherCosts = [];
         if (Array.isArray(otherCosts) && otherCosts.length > 0) {
             createdOtherCosts = await OtherCost.bulkCreate(
@@ -426,56 +440,85 @@ exports.createTenant = async (req, res) => {
             );
         }
 
-        const firstInvoicePeriodStart = tenantStartDate;
+        // Determine the period for the first invoice (based on the check-in date)
+        const firstInvoicePeriodStart = checkinDate;
         let firstInvoicePeriodEnd = addMonths(firstInvoicePeriodStart, 1);
         firstInvoicePeriodEnd = isLastDayOfMonth(firstInvoicePeriodStart) ? endOfMonth(firstInvoicePeriodEnd) : subDays(firstInvoicePeriodEnd, 1);
 
+        // Create the Tenant record
         newTenant = await Tenant.create({
-            roomId, name, phone, NIKNumber,
-            startDate: tenantStartDate, endDate: firstInvoicePeriodEnd, dueDate: invoiceDueDate, banishDate,
-            NIKImagePath, isNIKCopyDone,
-            tenancyStatus: tenancyStatus || 'Active',
-            createBy: req.user.username, updateBy: req.user.username
+            roomId,
+            name,
+            phone,
+            NIKNumber,
+            // Use checkinDate for the tenant's actual move-in date.
+            // startDate and endDate will now represent the *period* for the first invoice/lease.
+            startDate: firstInvoicePeriodStart, // The start of their first billing period
+            endDate: firstInvoicePeriodEnd,     // The end of their first billing period
+            checkoutDate: null, // Ensure this is null on creation
+            dueDate: invoiceDueDate,
+            banishDate,
+            NIKImagePath,
+            isNIKCopyDone,
+            tenancyStatus: tenancyStatus || 'Active', // Default to 'Active'
+            createBy: req.user.username,
+            updateBy: req.user.username
         }, { transaction: t });
 
+        // Create the first invoice
         const firstInvoice = await Invoice.create({
-            tenantId: newTenant.id, roomId: room.id,
-            periodStart: firstInvoicePeriodStart, periodEnd: firstInvoicePeriodEnd,
-            issueDate: tenantStartDate, dueDate: invoiceDueDate, banishDate: invoiceBanishDate,
-            totalAmountDue: 0, totalAmountPaid: 0,
+            tenantId: newTenant.id,
+            roomId: room.id,
+            periodStart: firstInvoicePeriodStart,
+            periodEnd: firstInvoicePeriodEnd,
+            issueDate: checkinDate, // Invoice is issued on check-in date
+            dueDate: invoiceDueDate,
+            banishDate: invoiceBanishDate,
+            totalAmountDue: 0,
+            totalAmountPaid: 0,
             status: 'Issued',
-            description: `Initial invoice for room ${room.roomNumber || roomId} period: ${firstInvoicePeriodStart.toISOString().split('T')[0]} to ${firstInvoicePeriodEnd.toISOString().split('T')[0]}`,
-            createBy: req.user.username, updateBy: req.user.username
+            description: `Initial invoice for room ${room.roomNumber || roomId} period: ${format(firstInvoicePeriodStart, 'yyyy-MM-dd')} to ${format(firstInvoicePeriodEnd, 'yyyy-MM-dd')}`,
+            createBy: req.user.username,
+            updateBy: req.user.username
         }, { transaction: t });
 
+        // Create charges for the first invoice
         let chargesToCreate = [];
         let calculatedTotalAmountDue = 0;
 
         chargesToCreate.push({
             invoiceId: firstInvoice.id,
-            name: newPrice.name, amount: newPrice.amount,
+            name: newPrice.name,
+            amount: newPrice.amount,
             description: newPrice.description,
             transactionType: 'debit',
-            createBy: req.user.username, updateBy: req.user.username
+            createBy: req.user.username,
+            updateBy: req.user.username
         });
         calculatedTotalAmountDue += newPrice.amount;
 
         for (const ap of createdAdditionalPrices) {
             chargesToCreate.push({
-                invoiceId: firstInvoice.id, name: ap.name,
-                amount: ap.amount, description: ap.description,
+                invoiceId: firstInvoice.id,
+                name: ap.name,
+                amount: ap.amount,
+                description: ap.description,
                 transactionType: 'debit',
-                createBy: req.user.username, updateBy: req.user.username
+                createBy: req.user.username,
+                updateBy: req.user.username
             });
             calculatedTotalAmountDue += ap.amount;
         }
 
         for (const oc of createdOtherCosts) {
             chargesToCreate.push({
-                invoiceId: firstInvoice.id, name: oc.name,
-                amount: oc.amount, description: oc.description,
+                invoiceId: firstInvoice.id,
+                name: oc.name,
+                amount: oc.amount,
+                description: oc.description,
                 transactionType: 'debit',
-                createBy: req.user.username, updateBy: req.user.username
+                createBy: req.user.username,
+                updateBy: req.user.username
             });
             calculatedTotalAmountDue += oc.amount;
         }
@@ -484,12 +527,15 @@ exports.createTenant = async (req, res) => {
             await Charge.bulkCreate(chargesToCreate, { transaction: t });
         }
 
+        // Update the first invoice with the calculated total amount due
         await firstInvoice.update({ totalAmountDue: calculatedTotalAmountDue }, { transaction: t });
-        await t.commit();
+
+        await t.commit(); // Commit the transaction
+
     } catch (error) {
-        if (t && !t.finished) {
+        if (t && !t.finished) { // Check if transaction is still active
             try {
-                await t.rollback();
+                await t.rollback(); // Rollback if error
             } catch (rollbackError) {
                 logger.error(`Rollback failed: ${rollbackError.message}`);
             }
@@ -499,6 +545,7 @@ exports.createTenant = async (req, res) => {
         return res.status(500).json({ message: 'Internal server error', error: error.message });
     }
 
+    // Post-commit fetch for the response
     try {
         const tenantWithDetails = await Tenant.findByPk(newTenant.id, {
             include: [
@@ -521,13 +568,12 @@ exports.createTenant = async (req, res) => {
                 }
             ]
         });
-        res.status(200).json(tenantWithDetails);
+        return res.status(200).json(tenantWithDetails);
     } catch (error) {
         logger.error(`❌ post-commit fetch failed: ${error.message}`);
         return res.status(500).json({ message: 'Post-commit fetch failed', error: error.message });
     }
 };
-
 
 exports.updateTenant = async (req, res) => {
     // No transaction needed for this specific method as per previous decision,

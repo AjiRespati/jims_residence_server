@@ -12,6 +12,7 @@ module.exports = (sequelize, DataTypes) => {
         dueDate: { type: DataTypes.DATE },
         banishDate: { type: DataTypes.DATE },
         endDate: { type: DataTypes.DATE },
+        checkinDate: { type: DataTypes.DATE },
         checkoutDate: { type: DataTypes.DATE },
         createBy: { type: DataTypes.STRING },
         updateBy: { type: DataTypes.STRING }
