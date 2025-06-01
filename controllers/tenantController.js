@@ -10,7 +10,8 @@ const logger = require('../config/logger');
 const path = require("path");
 const fs = require("fs");
 const {
-    subDays, addMonths, endOfMonth, isLastDayOfMonth, startOfDay, format
+    subDays, addMonths, endOfMonth, isLastDayOfMonth, startOfDay, format,
+    parseISO, isValid, setHours, setMinutes, setSeconds, setMilliseconds
 } = require('date-fns');
 
 
@@ -37,71 +38,63 @@ const deleteFile = (filePath, logPrefix = 'File') => {
 
 exports.getAllTenants = async (req, res) => {
     try {
-        // Extract filter parameters from query string
         const { boardingHouseId, dateFrom, dateTo } = req.query;
 
-        // Prepare the where clause for the main Tenant query
-        // Add checkoutDate: null here to filter out checked-out tenants
-        const tenantWhere = {
-            tenancyStatus: 'Active',
-            checkoutDate: null // <--- ADDED THIS LINE
-        };
+        const tenantWhere = {}; // Start with an empty where object
+
         let isDateFilterApplied = false;
+        let filterFromDate, filterToDate;
 
-        // // Add date filter if dateFrom and dateTo are provided and valid
-        // if (dateFrom && dateTo) {
-        //     const fromDate = new Date(dateFrom);
-        //     const toDate = new Date(dateTo);
-
-        //     if (!isNaN(fromDate.getTime()) && !isNaN(toDate.getTime())) {
-        //         // Adjust toDate to include the entire end day
-        //         toDate.setHours(23, 59, 59, 999);
-
-        //         tenantWhere.startDate = { // Filtering by Tenant's startDate
-        //             [Op.between]: [fromDate, toDate]
-        //         };
-        //         isDateFilterApplied = true;
-        //     } else {
-        //         // Handle invalid date formats
-        //         return res.status(400).json({
-        //             success: false,
-        //             message: 'Invalid date format for dateFrom or dateTo. Use YYYY-MM-DD.',
-        //             data: null
-        //         });
-        //     }
-        // } else if (dateFrom) {
-        //     // Handle only dateFrom provided
-        //     const fromDate = new Date(dateFrom);
-        //     if (!isNaN(fromDate.getTime())) {
-        //         tenantWhere.startDate = { // Filtering by Tenant's startDate
-        //             [Op.gte]: fromDate
-        //         };
-        //         isDateFilterApplied = true;
-        //     } else {
-        //         return res.status(400).json({
-        //             success: false,
-        //             message: 'Invalid date format for dateFrom. Use YYYY-MM-DD.',
-        //             data: null
-        //         });
-        //     }
-        // } else 
-        if (dateTo) {
-            // Handle only dateTo provided
-            const toDate = new Date(dateTo);
-            if (!isNaN(toDate.getTime())) {
-                toDate.setHours(23, 59, 59, 999); // Include the entire end day
-                tenantWhere.startDate = { // Filtering by Tenant's startDate
-                    [Op.lte]: toDate
-                };
-                isDateFilterApplied = true;
+        // --- Date Range Filtering Logic ---
+        if (dateFrom || dateTo) {
+            // Parse and validate dateFrom
+            if (dateFrom) {
+                filterFromDate = parseISO(dateFrom);
+                if (!isValid(filterFromDate)) {
+                    return res.status(400).json({ success: false, message: 'Invalid dateFrom format. Please use ISO 8601 (YYYY-MM-DD).', data: null });
+                }
+                filterFromDate = setHours(filterFromDate, 0, 0, 0); // Start of the day
             } else {
-                return res.status(400).json({
-                    success: false,
-                    message: 'Invalid date format for dateTo. Use YYYY-MM-DD.',
-                    data: null
-                });
+                filterFromDate = new Date('1900-01-01'); // Effectively no lower bound
             }
+
+            // Parse and validate dateTo
+            if (dateTo) {
+                filterToDate = parseISO(dateTo);
+                if (!isValid(filterToDate)) {
+                    return res.status(400).json({ success: false, message: 'Invalid dateTo format. Please use ISO 8601 (YYYY-MM-DD).', data: null });
+                }
+                filterToDate = setHours(filterToDate, 23, 59, 59, 999); // End of the day
+            } else {
+                filterToDate = new Date('2100-12-31'); // Effectively no upper bound
+            }
+
+            // Validate that filterFromDate is not after filterToDate
+            if (filterFromDate > filterToDate) {
+                return res.status(400).json({ success: false, message: 'dateFrom cannot be after dateTo.', data: null });
+            }
+
+            // --- Updated Overlap Logic for Tenant's Presence ---
+            // A tenant is considered "present" in the filter range if:
+            // (their checkinDate <= filterToDate) AND
+            // (their checkoutDate is NULL OR their checkoutDate >= filterFromDate)
+            tenantWhere[Op.and] = [
+                { checkinDate: { [Op.lte]: filterToDate } }, // Tenant checked in on or before the end of the filter period
+                {
+                    [Op.or]: [
+                        { checkoutDate: { [Op.gte]: filterFromDate } }, // Tenant checked out on or after the start of the filter period
+                        { checkoutDate: null } // Or tenant has not checked out yet (meaning they are still present)
+                    ]
+                }
+            ];
+            isDateFilterApplied = true;
+
+        } else {
+            // If no date range filter is provided, revert to showing currently active and non-checked-out tenants
+            tenantWhere.tenancyStatus = 'Active';
+            tenantWhere.checkoutDate = null;
         }
+        // --- End Date Range Filtering Logic ---
 
 
         // Prepare the where clause for the BoardingHouse include
@@ -115,17 +108,17 @@ exports.getAllTenants = async (req, res) => {
 
         // Define the Room include configuration
         const roomIncludeConfig = {
-            model: Room, // Include the associated Room
+            model: Room,
             attributes: ['id', 'roomNumber', 'roomSize', 'roomStatus'],
             include: [
                 {
-                    model: BoardingHouse, // Include BoardingHouse nested within Room
+                    model: BoardingHouse,
                     attributes: ['id', 'name'],
-                    where: boardingHouseWhere, // Apply where clause directly here
-                    required: isBoardingHouseFilterApplied // Require BoardingHouse if filtering by it
+                    where: boardingHouseWhere,
+                    required: isBoardingHouseFilterApplied
                 }
             ],
-            required: isBoardingHouseFilterApplied // Require Room if filtering by BoardingHouse
+            required: isBoardingHouseFilterApplied
         };
 
 
@@ -133,37 +126,27 @@ exports.getAllTenants = async (req, res) => {
         const tenants = await Tenant.findAll({
             where: tenantWhere, // Apply the combined filters to the main query
             attributes: [
-                'id',
-                'name',
-                'phone',
-                'NIKNumber',
-                'tenancyStatus',
-                'startDate',
-                'endDate',
-                'dueDate',
-                'banishDate',
-                'checkoutDate', // <--- IMPORTANT: Include checkoutDate in attributes so you can see it
-                'createBy',
-                'updateBy',
-                'NIKImagePath',
-                'isNIKCopyDone'
+                'id', 'name', 'phone', 'NIKNumber', 'tenancyStatus',
+                'checkinDate', // <-- IMPORTANT: Now includes the dedicated checkinDate
+                'startDate', 'endDate', 'dueDate', 'banishDate', 'checkoutDate',
+                'createBy', 'updateBy', 'NIKImagePath', 'isNIKCopyDone'
             ],
             include: [
-                roomIncludeConfig, // Use the prepared Room include configuration
+                roomIncludeConfig,
                 {
-                    model: Invoice, // Include associated Invoices
+                    model: Invoice,
                     attributes: [
                         'id', 'periodStart', 'periodEnd', 'issueDate', 'dueDate',
                         'totalAmountDue', 'totalAmountPaid', 'status', 'description'
                     ],
                     where: {
-                        status: ['Issued', 'Unpaid', 'PartiallyPaid'] // Filter for outstanding invoices
+                        status: ['Issued', 'Unpaid', 'PartiallyPaid']
                     },
-                    required: false, // Use false to get all tenants even if they have no outstanding invoices matching this criteria
+                    required: false,
                     order: [['dueDate', 'ASC']],
                     include: [
                         {
-                            model: Charge, // Include the Charges within the outstanding Invoice
+                            model: Charge,
                             as: 'Charges',
                             attributes: ['id', 'name', 'amount', 'description', 'transactionType'],
                             required: false
@@ -171,43 +154,40 @@ exports.getAllTenants = async (req, res) => {
                     ]
                 }
             ],
-            order: [['createdAt', 'DESC']] // Order tenants, e.g., by most recently created
+            order: [['createdAt', 'DESC']]
         });
 
         // Flatten the response structure
         const flattenedTenants = tenants.map(tenant => {
-            const tenantData = tenant.toJSON(); // Convert Sequelize instance to plain JSON object
+            const tenantData = tenant.toJSON();
 
-            // Extract roomNumber and boardingHouseName from nested objects
             const roomNumber = tenantData.Room?.roomNumber || null;
             const boardingHouseName = tenantData.Room?.BoardingHouse?.name || null;
 
-            // Add roomNumber and boardingHouseName as top-level properties
             tenantData.roomNumber = roomNumber;
             tenantData.boardingHouseName = boardingHouseName;
 
-            // Remove the original nested Room object
             delete tenantData.Room;
-
-            // The Invoices array (containing outstanding invoices, each with Charges) remains as a nested array.
 
             return tenantData;
         });
 
         let message = 'Tenants retrieved successfully with outstanding invoices, room number, and boarding house name.';
         if (isBoardingHouseFilterApplied && isDateFilterApplied) {
-            message = `Tenants retrieved successfully for Boarding House ID: ${boardingHouseId} and start date range: ${dateFrom} to ${dateTo}.`;
+            message = `Tenants retrieved successfully for Boarding House ID: ${boardingHouseId} and period overlap: ${format(filterFromDate, 'yyyy-MM-dd')} to ${format(filterToDate, 'yyyy-MM-dd')}.`;
         } else if (isBoardingHouseFilterApplied) {
             message = `Tenants retrieved successfully for Boarding House ID: ${boardingHouseId}.`;
         } else if (isDateFilterApplied) {
-            message = `Tenants retrieved successfully for start date range: ${dateFrom} to ${dateTo}.`;
+            message = `Tenants retrieved successfully for period overlap: ${format(filterFromDate, 'yyyy-MM-dd')} to ${format(filterToDate, 'yyyy-MM-dd')}.`;
+        } else {
+            message = 'Currently active and non-checked-out tenants retrieved successfully.';
         }
 
 
         res.status(200).json({
             success: true,
             message: message,
-            data: flattenedTenants // Send the flattened data
+            data: flattenedTenants
         });
 
     } catch (error) {
@@ -243,6 +223,8 @@ exports.getTenantById = async (req, res) => {
                 'startDate',
                 'dueDate', // This might now be the tenant's contract end date, distinct from invoice due dates
                 'banishDate',
+                'checkinDate',
+                'checkoutDate',
                 'createBy',
                 'updateBy'
             ],
@@ -458,6 +440,7 @@ exports.createTenant = async (req, res) => {
             checkoutDate: null, // Ensure this is null on creation
             dueDate: invoiceDueDate,
             banishDate,
+            checkinDate: firstInvoicePeriodStart,
             NIKImagePath,
             isNIKCopyDone,
             tenancyStatus: tenancyStatus || 'Active', // Default to 'Active'
@@ -730,7 +713,7 @@ exports.deleteTenant = async (req, res) => {
 
 exports.tenantCheckout = async (req, res) => {
     const tenantId = req.params.id; // Assuming tenantId comes from URL params, e.g., /api/tenants/:id/checkout
-    const checkoutDate = startOfDay(new Date()); // Checkout is handled as 'today' based on the request
+    const checkoutDate = req.body.checkoutDate || startOfDay(new Date()); // Checkout is handled as 'today' based on the request
 
     let transaction; // Declare transaction variable
     try {
