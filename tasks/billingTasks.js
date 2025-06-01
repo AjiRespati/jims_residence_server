@@ -20,8 +20,8 @@ const { Tenant, Invoice, Charge, Room, Price, AdditionalPrice, OtherCost } = req
 const DAYS_BEFORE_PERIOD_Start_TO_ISSUE_INVOICE = 7;
 
 // Define the INTENDED schedule for the billing logic (2:00 AM)
-const INTENDED_BILLING_SCHEDULE_HOUR = 1; // 2 AM
-const INTENDED_BILLING_SCHEDULE_MINUTE = 0; // 0 minutes
+const INTENDED_BILLING_SCHEDULE_HOUR = 4; // 2 AM (Note: your log showed 18:00:00Z [info]: ⏰ Current time (2025-06-02 01:00:00 WIB), so 1 AM WIB)
+const INTENDED_BILLING_SCHEDULE_MINUTE = 23; // 0 minutes
 
 // Define the SIMPLE, RELIABLE cron schedule for node-schedule to trigger the task frequently.
 // The task logic will check if it's the intended time to actually run the billing process.
@@ -132,9 +132,12 @@ const generateMonthlyInvoices = async () => {
 
     try {
         // --- Step 1: Fetch ALL Active Tenants with their Room and current active costs ---
+        // IMPORTANT: Removed raw: true and nest: true to get Sequelize model instances
+        // These instances have the .update() method.
         const allActiveTenants = await Tenant.findAll({
             where: {
-                tenancyStatus: 'Active'
+                tenancyStatus: 'Active',
+                checkoutDate: null // Only process tenants who haven't checked out
             },
             include: [
                 {
@@ -166,8 +169,7 @@ const generateMonthlyInvoices = async () => {
                     ]
                 }
             ],
-            raw: true, // Get raw data for easier processing
-            nest: true // Nest included models
+            // Removed raw: true and nest: true
         });
 
         if (allActiveTenants.length === 0) {
@@ -188,6 +190,7 @@ const generateMonthlyInvoices = async () => {
             let previousPeriodEndForCalculation;
 
             // Fetch the very latest existing invoice for this tenant (any non-Void status)
+            // Removed raw: true here too for consistency, though it was not the source of the original error
             const latestExistingInvoice = await Invoice.findOne({
                 where: {
                     tenantId: tenant.id,
@@ -203,11 +206,12 @@ const generateMonthlyInvoices = async () => {
                 previousPeriodEndForCalculation = latestPeriodEnd;
                 logger.info(`Starting billing for Tenant ${tenant.id} from day after latest invoice period end: ${format(currentPeriodStartForInvoice, 'yyyy-MM-dd')}`);
             } else {
-                // If no invoices exist for this tenant, start from their original startDate
-                currentPeriodStartForInvoice = startOfDay(tenant.startDate);
-                // For the very first invoice calculation, previousPeriodEnd is conceptually the day before startDate
+                // If no invoices exist for this tenant, start from their original checkinDate
+                // THIS WAS MODIFIED: Changed from tenant.startDate to tenant.checkinDate
+                currentPeriodStartForInvoice = startOfDay(tenant.checkinDate);
+                // For the very first invoice calculation, previousPeriodEnd is conceptually the day before checkinDate
                 previousPeriodEndForCalculation = subDays(currentPeriodStartForInvoice, 1);
-                logger.info(`Starting billing for Tenant ${tenant.id} from tenant's start date (no existing invoice): ${format(currentPeriodStartForInvoice, 'yyyy-MM-dd')}`);
+                logger.info(`Starting billing for new Tenant ${tenant.id} from tenant's checkinDate (no existing invoice): ${format(currentPeriodStartForInvoice, 'yyyy-MM-dd')}`);
             }
 
             // Define the cutoff for generating invoices:
@@ -257,10 +261,12 @@ const generateMonthlyInvoices = async () => {
                 }
 
                 // --- Proceed with creating the new invoice for this period ---
+                // Start a new transaction for EACH tenant's invoice generation to ensure atomicity
                 const t = await sequelize.transaction();
 
                 try {
-                    const tenantRoom = tenant.Room; // The tenant's room with current costs (fetched initially)
+                    // Access room data from the already fetched tenant object
+                    const tenantRoom = tenant.Room;
 
                     // >>> ADJUSTMENT HERE: issueDate is now 7 days before periodStart <<<
                     const invoiceIssueDate = subDays(currentPeriodStartForInvoice, 7);
@@ -284,7 +290,7 @@ const generateMonthlyInvoices = async () => {
                         description: `Tagihan untuk kamar ${tenantRoom.roomNumber}\nPeriode: ${format(currentPeriodStartForInvoice, 'yyyy-MM-dd')} to ${format(currentPeriodEnd, 'yyyy-MM-dd')}`,
                         createBy: 'Automated Billing Task', // Indicate creation source
                         updateBy: 'Automated Billing Task',
-                    }, { transaction: t });
+                    }, { transaction: t }); // Use the per-tenant transaction
 
                     // 4. Prepare and create Charge records based on current active costs
                     const chargesToCreate = [];
@@ -313,7 +319,7 @@ const generateMonthlyInvoices = async () => {
                                 name: ap.name || 'Additional Cost',
                                 amount: ap.amount,
                                 description: ap.description || 'Additional charge details',
-                                transactionType: 'debit',
+                                transactionType: 'Debit',
                                 createBy: 'Automated Billing Task',
                                 updateBy: 'Automated Billing Task',
                             };
@@ -341,22 +347,22 @@ const generateMonthlyInvoices = async () => {
 
                     // Create all prepared Charge records in bulk
                     if (chargesToCreate.length > 0) {
-                        await Charge.bulkCreate(chargesToCreate, { transaction: t });
+                        await Charge.bulkCreate(chargesToCreate, { transaction: t }); // Use the per-tenant transaction
                     }
 
                     // 5. Update the totalAmountDue on the New Invoice record
-                    await newInvoice.update({ totalAmountDue: calculatedTotalAmountDue }, { transaction: t });
+                    await newInvoice.update({ totalAmountDue: calculatedTotalAmountDue }, { transaction: t }); // Use the per-tenant transaction
 
-                    // --- NEW ADJUSTMENT STARTS HERE ---
+                    // --- FIX FOR THE ERROR: tenant is now a Sequelize model instance ---
                     // Update the tenant's startDate and endDate to reflect the period of the newly created invoice
                     await tenant.update({
                         startDate: newInvoice.periodStart,
                         endDate: newInvoice.periodEnd,
-                        updateBy: 'System/Automated Billing' // Or req.user.username if this task can be manually triggered
-                    }, { transaction: t });
+                        updateBy: 'System/Automated Billing'
+                    }, { transaction: t }); // Use the per-tenant transaction
 
                     logger.info(`Tenant ${tenant.name} (${tenant.id})'s startDate and endDate updated to reflect new invoice period (${format(newInvoice.periodStart, 'yyyy-MM-dd')} to ${format(newInvoice.periodEnd, 'yyyy-MM-dd')}).`);
-                    // --- NEW ADJUSTMENT ENDS HERE ---
+                    // --- END FIX ---
 
                     // Commit the transaction for this tenant's invoice
                     await t.commit();
