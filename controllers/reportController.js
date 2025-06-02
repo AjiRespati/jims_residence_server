@@ -450,7 +450,7 @@ exports.getFinancialTransactions = async (req, res) => {
             };
 
             expDateFilter = {
-                createdAt: {
+                expenseDate: {
                     [Op.between]: [startDate, endDate]
                 }
             };
