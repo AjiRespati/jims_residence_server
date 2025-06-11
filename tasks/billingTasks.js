@@ -16,8 +16,8 @@ const moment = require('moment-timezone');
 
 const { Tenant, Invoice, Charge, Room, Price, AdditionalPrice, OtherCost } = require('../models'); // Import all necessary models
 
-// Define how many days before the period end to issue the next invoice
-const DAYS_BEFORE_PERIOD_Start_TO_ISSUE_INVOICE = 7;
+// TODO: Define how many days before the period end to issue the next invoice
+const DAYS_BEFORE_PERIOD_Start_TO_ISSUE_INVOICE = 5;
 
 // Define the INTENDED schedule for the billing logic (2:00 AM)
 const INTENDED_BILLING_SCHEDULE_HOUR = 4; // 2 AM (Note: your log showed 18:00:00Z [info]: ⏰ Current time (2025-06-02 01:00:00 WIB), so 1 AM WIB)

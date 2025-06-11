@@ -153,8 +153,8 @@ exports.getAllTenants = async (req, res) => {
                         }
                     ]
                 }
-            ],
-            order: [['createdAt', 'DESC']]
+            ]
+            // order: [['createdAt', 'DESC']]
         });
 
         // Flatten the response structure
@@ -183,6 +183,8 @@ exports.getAllTenants = async (req, res) => {
             message = 'Currently active and non-checked-out tenants retrieved successfully.';
         }
 
+        // sorting after generating response
+        flattenedTenants.sort((a, b) => a.roomNumber - b.roomNumber);
 
         res.status(200).json({
             success: true,
