@@ -17,11 +17,11 @@ const moment = require('moment-timezone');
 const { Tenant, Invoice, Charge, Room, Price, AdditionalPrice, OtherCost } = require('../models'); // Import all necessary models
 
 // TODO: Define how many days before the period end to issue the next invoice
-const DAYS_BEFORE_PERIOD_Start_TO_ISSUE_INVOICE = 5;
+const DAYS_BEFORE_PERIOD_Start_TO_ISSUE_INVOICE = 3;
 
-// Define the INTENDED schedule for the billing logic (2:00 AM)
-const INTENDED_BILLING_SCHEDULE_HOUR = 4; // 2 AM (Note: your log showed 18:00:00Z [info]: ⏰ Current time (2025-06-02 01:00:00 WIB), so 1 AM WIB)
-const INTENDED_BILLING_SCHEDULE_MINUTE = 23; // 0 minutes
+// Define the INTENDED schedule for the billing logic (1:00 AM)
+const INTENDED_BILLING_SCHEDULE_HOUR = 1; // 1 AM
+const INTENDED_BILLING_SCHEDULE_MINUTE = 0; // 0 minutes
 
 // Define the SIMPLE, RELIABLE cron schedule for node-schedule to trigger the task frequently.
 // The task logic will check if it's the intended time to actually run the billing process.
@@ -270,7 +270,7 @@ const generateMonthlyInvoices = async () => {
 
                     // >>> ADJUSTMENT HERE: issueDate is now 7 days before periodStart <<<
                     const invoiceIssueDate = subDays(currentPeriodStartForInvoice, 7);
-                    const dueDate = addDays(currentPeriodStartForInvoice, 7);
+                    const dueDate = addDays(currentPeriodStartForInvoice, 0);
                     const banishDate = addDays(currentPeriodStartForInvoice, 14);
 
                     logger.info(`Generating invoice for Tenant ${tenant.id} (Room ${tenantRoom.roomNumber}) for period: ${format(currentPeriodStartForInvoice, 'yyyy-MM-dd')} to ${format(currentPeriodEnd, 'yyyy-MM-dd')}`);
