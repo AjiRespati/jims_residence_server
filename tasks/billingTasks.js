@@ -358,6 +358,7 @@ const generateMonthlyInvoices = async () => {
                     await tenant.update({
                         startDate: newInvoice.periodStart,
                         endDate: newInvoice.periodEnd,
+                        dueDate: dueDate,
                         updateBy: 'System/Automated Billing'
                     }, { transaction: t }); // Use the per-tenant transaction
 
