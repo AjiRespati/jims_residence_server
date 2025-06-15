@@ -20,8 +20,8 @@ const { Tenant, Invoice, Charge, Room, Price, AdditionalPrice, OtherCost } = req
 const DAYS_BEFORE_PERIOD_Start_TO_ISSUE_INVOICE = 3;
 
 // Define the INTENDED schedule for the billing logic (1:00 AM)
-const INTENDED_BILLING_SCHEDULE_HOUR = 14; // 1 AM
-const INTENDED_BILLING_SCHEDULE_MINUTE = 05; // 0 minutes
+const INTENDED_BILLING_SCHEDULE_HOUR = 1; // 1 AM
+const INTENDED_BILLING_SCHEDULE_MINUTE = 0; // 0 minutes
 
 // Define the SIMPLE, RELIABLE cron schedule for node-schedule to trigger the task frequently.
 // The task logic will check if it's the intended time to actually run the billing process.
