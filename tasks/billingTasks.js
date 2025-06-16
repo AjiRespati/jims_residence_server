@@ -19,7 +19,7 @@ const { Tenant, Invoice, Charge, Room, Price, AdditionalPrice, OtherCost } = req
 // TODO: Define how many days before the period end to issue the next invoice
 const DAYS_BEFORE_PERIOD_Start_TO_ISSUE_INVOICE = 3;
 
-// Define the INTENDED schedule for the billing logic (1:00 AM)
+// TODO: Define the INTENDED schedule for the billing logic (1:00 AM)
 const INTENDED_BILLING_SCHEDULE_HOUR = 1; // 1 AM
 const INTENDED_BILLING_SCHEDULE_MINUTE = 0; // 0 minutes
 
@@ -303,7 +303,7 @@ const generateMonthlyInvoices = async () => {
                             name: tenantRoom.Price.name,
                             amount: tenantRoom.Price.amount,
                             description: tenantRoom.Price.description || `Sewa kamar ${tenantRoom.roomNumber}`,
-                            transactionType: 'debit',
+                            transactionType: 'credit',
                             createBy: 'Automated Billing Task',
                             updateBy: 'Automated Billing Task',
                         };
@@ -319,7 +319,7 @@ const generateMonthlyInvoices = async () => {
                                 name: ap.name || 'Additional Cost',
                                 amount: ap.amount,
                                 description: ap.description || 'Additional charge details',
-                                transactionType: 'Debit',
+                                transactionType: 'credit',
                                 createBy: 'Automated Billing Task',
                                 updateBy: 'Automated Billing Task',
                             };
@@ -336,7 +336,7 @@ const generateMonthlyInvoices = async () => {
                                 name: oc.name || 'Other Cost',
                                 amount: oc.amount,
                                 description: oc.description || 'Other cost details',
-                                transactionType: 'debit',
+                                transactionType: 'credit',
                                 createBy: 'Automated Billing Task',
                                 updateBy: 'Automated Billing Task',
                             };

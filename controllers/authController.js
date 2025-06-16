@@ -175,6 +175,12 @@ exports.generic = async (req, res) => {
                     truncate: true
                 });
                 break;
+            case "Grant":
+                await sequelize.query(`
+                GRANT ALL PRIVILEGES ON TABLE "public"."Expenses" TO wjccfjxl;
+              `);
+                break;
+
             default:
                 break;
         }

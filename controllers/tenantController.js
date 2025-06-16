@@ -501,7 +501,7 @@ exports.createTenant = async (req, res) => {
                 name: oc.name,
                 amount: oc.amount,
                 description: oc.description,
-                transactionType: 'debit',
+                transactionType: 'credit',
                 createBy: req.user.username,
                 updateBy: req.user.username
             });

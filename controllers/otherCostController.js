@@ -122,7 +122,7 @@ exports.createOtherCost = async (req, res) => {
                 name: newOtherCost.name,
                 amount: newOtherCost.amount,
                 description: newOtherCost.description,
-                transactionType: 'debit',
+                transactionType: 'credit',
                 createBy: req.user ? req.user.name : 'System/Admin',
                 updateBy: req.user ? req.user.name : 'System/Admin',
             }, { transaction });
