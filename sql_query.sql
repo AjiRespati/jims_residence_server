@@ -21,3 +21,4 @@ SET "dueDate" = '2025-06-15T00:00:00+07:00'
 WHERE id = 'edb9f054-d1b8-439d-bf2b-742080689090';
 
 
+GRANT ALL PRIVILEGES ON TABLE "public"."Transactions" TO wjccfjxl;

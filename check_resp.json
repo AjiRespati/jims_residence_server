@@ -1,0 +1,380 @@
+{
+    "invoices": [
+        {
+            "id": "9f061020-c226-451d-ba77-8f23fa2109ba",
+            "periodStart": "2025-05-29T17:00:00.000Z",
+            "periodEnd": "2025-06-28T17:00:00.000Z",
+            "issueDate": "2025-05-29T17:00:00.000Z",
+            "dueDate": "2025-06-05T17:00:00.000Z",
+            "totalAmountDue": 1000000,
+            "totalAmountPaid": 1000000,
+            "status": "Paid",
+            "description": "Initial invoice for room 03 period: 2025-05-30 to 2025-06-29",
+            "createBy": "s.sarjiman@gmail.com",
+            "updateBy": "s.sarjiman@gmail.com",
+            "createdAt": "2025-06-08T08:17:54.034Z",
+            "updatedAt": "2025-06-08T08:58:50.759Z",
+            "Room": {
+                "id": "d1e6373a-c82b-4de1-8beb-e482286cab93",
+                "roomNumber": "03",
+                "BoardingHouse": {
+                    "id": "e3d94fb3-4e85-4d28-a5b2-9674e9662ab2",
+                    "name": "Residenza Solo"
+                }
+            },
+            "Tenant": {
+                "id": "7b88fed1-d0c1-4668-b667-f9c09bfdaeb0",
+                "name": "Aurel ME",
+                "phone": "+628578490830"
+            },
+            "Charges": [
+                {
+                    "id": "c6f5879e-b67f-47b5-9769-01470a3bf3bd",
+                    "name": "Sewa kamar",
+                    "amount": 1000000,
+                    "description": "Sewa kamar 03",
+                    "transactionType": "debit"
+                }
+            ],
+            "Transactions": [
+                {
+                    "id": "9569af92-4652-41ad-b1bc-702e29eea82e",
+                    "amount": 1000000,
+                    "transactionDate": "2025-05-29T17:00:00.000Z",
+                    "method": "Cash",
+                    "description": "testing masih hardcode",
+                    "transactionProofPath": null
+                }
+            ]
+        },
+        {
+            "id": "49a971cd-0773-41be-b02d-99db3205d81d",
+            "periodStart": "2025-05-17T17:00:00.000Z",
+            "periodEnd": "2025-06-16T17:00:00.000Z",
+            "issueDate": "2025-05-10T17:00:00.000Z",
+            "dueDate": "2025-05-24T17:00:00.000Z",
+            "totalAmountDue": 1000000,
+            "totalAmountPaid": 1000000,
+            "status": "Paid",
+            "description": "Tagihan untuk kamar 08\nPeriode: 2025-05-18 to 2025-06-17",
+            "createBy": "Automated Billing Task",
+            "updateBy": "aji.b.respati@gmail.com",
+            "createdAt": "2025-06-01T21:46:00.296Z",
+            "updatedAt": "2025-06-01T22:06:51.568Z",
+            "Room": {
+                "id": "31452479-305b-416e-83e3-141b499f583a",
+                "roomNumber": "08",
+                "BoardingHouse": {
+                    "id": "e3d94fb3-4e85-4d28-a5b2-9674e9662ab2",
+                    "name": "Residenza Solo"
+                }
+            },
+            "Tenant": {
+                "id": "de24bee0-b5a6-47dc-960a-abef4e4ef4bc",
+                "name": "Farrel Putra",
+                "phone": "+62 81211391159"
+            },
+            "Charges": [
+                {
+                    "id": "d996f72d-a154-43de-bd47-b776cb6b6d50",
+                    "name": "Sewa kamar",
+                    "amount": 1000000,
+                    "description": "Sewa kamar 08",
+                    "transactionType": "debit"
+                }
+            ],
+            "Transactions": [
+                {
+                    "id": "70f8c721-26b2-46c2-9c0d-c6f1d2020133",
+                    "amount": 1000000,
+                    "transactionDate": "2025-05-17T17:00:00.000Z",
+                    "method": "Cash",
+                    "description": "testing masih hardcode",
+                    "transactionProofPath": null
+                }
+            ]
+        },
+        {
+            "id": "8c8b1a6a-89ce-485d-a551-03421394356e",
+            "periodStart": "2025-05-14T17:00:00.000Z",
+            "periodEnd": "2025-06-13T17:00:00.000Z",
+            "issueDate": "2025-05-07T17:00:00.000Z",
+            "dueDate": "2025-05-21T17:00:00.000Z",
+            "totalAmountDue": 1000000,
+            "totalAmountPaid": 1000000,
+            "status": "Paid",
+            "description": "Tagihan untuk kamar 05\nPeriode: 2025-05-15 to 2025-06-14",
+            "createBy": "Automated Billing Task",
+            "updateBy": "aji.b.respati@gmail.com",
+            "createdAt": "2025-06-01T21:46:00.253Z",
+            "updatedAt": "2025-06-01T22:06:02.401Z",
+            "Room": {
+                "id": "74045046-ed8c-4e81-bd5d-7a0b205a3f2a",
+                "roomNumber": "05",
+                "BoardingHouse": {
+                    "id": "e3d94fb3-4e85-4d28-a5b2-9674e9662ab2",
+                    "name": "Residenza Solo"
+                }
+            },
+            "Tenant": {
+                "id": "b1fe3e21-4e88-4c36-a464-efd39a40ff24",
+                "name": "Galung & Zidan",
+                "phone": "+62 813-9188-3779"
+            },
+            "Charges": [
+                {
+                    "id": "4f8bd3a3-8272-4daf-80ae-eb4de298abf7",
+                    "name": "Sewa kamar",
+                    "amount": 1000000,
+                    "description": "Sewa kamar 05",
+                    "transactionType": "debit"
+                }
+            ],
+            "Transactions": [
+                {
+                    "id": "6107249a-d7e1-4f10-b2fd-b3d3fb592a77",
+                    "amount": 1000000,
+                    "transactionDate": "2025-05-16T17:00:00.000Z",
+                    "method": "Cash",
+                    "description": "testing masih hardcode",
+                    "transactionProofPath": null
+                }
+            ]
+        },
+        {
+            "id": "ed3a8914-dc8e-4bd7-bfc5-9ae1f468a5dc",
+            "periodStart": "2025-05-31T17:00:00.000Z",
+            "periodEnd": "2025-06-29T17:00:00.000Z",
+            "issueDate": "2025-05-24T17:00:00.000Z",
+            "dueDate": "2025-06-07T17:00:00.000Z",
+            "totalAmountDue": 1000000,
+            "totalAmountPaid": 1000000,
+            "status": "Paid",
+            "description": "Tagihan untuk kamar 01\nPeriode: 2025-06-01 to 2025-06-30",
+            "createBy": "Automated Billing Task",
+            "updateBy": "s.sarjiman@gmail.com",
+            "createdAt": "2025-06-01T21:46:00.210Z",
+            "updatedAt": "2025-06-08T08:59:29.917Z",
+            "Room": {
+                "id": "6cd5fbbd-84e3-4c86-b419-4040d1f30a2e",
+                "roomNumber": "01",
+                "BoardingHouse": {
+                    "id": "e3d94fb3-4e85-4d28-a5b2-9674e9662ab2",
+                    "name": "Residenza Solo"
+                }
+            },
+            "Tenant": {
+                "id": "1a21a801-35a2-4bd0-b934-17c64ec7745c",
+                "name": "Galih Aji Nur",
+                "phone": "+628816416859"
+            },
+            "Charges": [
+                {
+                    "id": "780308a4-6a68-4a59-b59a-04624ed0ce88",
+                    "name": "Sewa kamar",
+                    "amount": 1000000,
+                    "description": "Sewa kamar 01",
+                    "transactionType": "debit"
+                }
+            ],
+            "Transactions": [
+                {
+                    "id": "b8298626-f39e-4e70-a84c-19b61b88660d",
+                    "amount": 1000000,
+                    "transactionDate": "2025-05-31T17:00:00.000Z",
+                    "method": "Cash",
+                    "description": "testing masih hardcode",
+                    "transactionProofPath": null
+                }
+            ]
+        },
+        {
+            "id": "768d3d57-6467-4631-b9c9-28a51e31939f",
+            "periodStart": "2025-05-22T17:00:00.000Z",
+            "periodEnd": "2025-06-21T17:00:00.000Z",
+            "issueDate": "2025-05-15T17:00:00.000Z",
+            "dueDate": "2025-05-29T17:00:00.000Z",
+            "totalAmountDue": 1000000,
+            "totalAmountPaid": 1000000,
+            "status": "Paid",
+            "description": "Tagihan untuk kamar 02\nPeriode: 2025-05-23 to 2025-06-22",
+            "createBy": "Automated Billing Task",
+            "updateBy": "s.sarjiman@gmail.com",
+            "createdAt": "2025-06-01T21:46:00.145Z",
+            "updatedAt": "2025-06-08T09:00:09.665Z",
+            "Room": {
+                "id": "192ee950-7b81-4404-a3fa-5ac69f907dd0",
+                "roomNumber": "02",
+                "BoardingHouse": {
+                    "id": "e3d94fb3-4e85-4d28-a5b2-9674e9662ab2",
+                    "name": "Residenza Solo"
+                }
+            },
+            "Tenant": {
+                "id": "52c07a7e-eeeb-48b0-b1d8-cdcb9a8f2ded",
+                "name": "Indah Sofiati",
+                "phone": "+6283136782130"
+            },
+            "Charges": [
+                {
+                    "id": "85a0554b-dac6-4a0e-bc16-99e464590cd3",
+                    "name": "Sewa kamar",
+                    "amount": 1000000,
+                    "description": "Sewa kamar 02",
+                    "transactionType": "debit"
+                }
+            ],
+            "Transactions": [
+                {
+                    "id": "e15ca036-5776-4413-afe9-5331c0e7d2c3",
+                    "amount": 1000000,
+                    "transactionDate": "2025-06-03T17:00:00.000Z",
+                    "method": "Cash",
+                    "description": "testing masih hardcode",
+                    "transactionProofPath": null
+                }
+            ]
+        },
+        {
+            "id": "e337351f-d200-4dfc-a0cd-af2c9fe80809",
+            "periodStart": "2025-05-13T17:00:00.000Z",
+            "periodEnd": "2025-06-12T17:00:00.000Z",
+            "issueDate": "2025-05-13T17:00:00.000Z",
+            "dueDate": "2025-05-20T17:00:00.000Z",
+            "totalAmountDue": 1200000,
+            "totalAmountPaid": 1200000,
+            "status": "Paid",
+            "description": "Initial invoice for room 10 period: 2025-05-14 to 2025-06-13",
+            "createBy": "aji.b.respati@gmail.com",
+            "updateBy": "aji.b.respati@gmail.com",
+            "createdAt": "2025-06-01T09:38:32.348Z",
+            "updatedAt": "2025-06-01T09:39:04.596Z",
+            "Room": {
+                "id": "7b91d303-7479-49c3-a37a-16dcd93ef29a",
+                "roomNumber": "10",
+                "BoardingHouse": {
+                    "id": "e3d94fb3-4e85-4d28-a5b2-9674e9662ab2",
+                    "name": "Residenza Solo"
+                }
+            },
+            "Tenant": {
+                "id": "b7358fa8-2367-4995-a339-76246dfe2db9",
+                "name": "Nareswari",
+                "phone": "+6289622245931"
+            },
+            "Charges": [
+                {
+                    "id": "7e6f2624-ff80-4c4d-9e23-a34b3dffd724",
+                    "name": "Sewa kamar",
+                    "amount": 1200000,
+                    "description": "Sewa kamar 10",
+                    "transactionType": "debit"
+                }
+            ],
+            "Transactions": [
+                {
+                    "id": "2905a65d-3688-4d29-9c68-edc6b4e2268d",
+                    "amount": 1200000,
+                    "transactionDate": "2025-05-13T17:00:00.000Z",
+                    "method": "Cash",
+                    "description": "testing masih hardcode",
+                    "transactionProofPath": null
+                }
+            ]
+        },
+        {
+            "id": "961d4390-efa9-4479-8260-484447b72df9",
+            "periodStart": "2025-04-30T17:00:00.000Z",
+            "periodEnd": "2025-05-30T17:00:00.000Z",
+            "issueDate": "2025-04-30T17:00:00.000Z",
+            "dueDate": "2025-05-07T17:00:00.000Z",
+            "totalAmountDue": 1000000,
+            "totalAmountPaid": 1000000,
+            "status": "Paid",
+            "description": "Initial invoice for room 01 period: 2025-05-01 to 2025-05-31",
+            "createBy": "aji.b.respati@gmail.com",
+            "updateBy": "aji.b.respati@gmail.com",
+            "createdAt": "2025-06-01T09:36:01.019Z",
+            "updatedAt": "2025-06-01T09:36:38.289Z",
+            "Room": {
+                "id": "6cd5fbbd-84e3-4c86-b419-4040d1f30a2e",
+                "roomNumber": "01",
+                "BoardingHouse": {
+                    "id": "e3d94fb3-4e85-4d28-a5b2-9674e9662ab2",
+                    "name": "Residenza Solo"
+                }
+            },
+            "Tenant": {
+                "id": "1a21a801-35a2-4bd0-b934-17c64ec7745c",
+                "name": "Galih Aji Nur",
+                "phone": "+628816416859"
+            },
+            "Charges": [
+                {
+                    "id": "045850c0-c19f-46e0-8762-1fdfce4566f6",
+                    "name": "Sewa kamar",
+                    "amount": 1000000,
+                    "description": "Sewa kamar 01",
+                    "transactionType": "debit"
+                }
+            ],
+            "Transactions": [
+                {
+                    "id": "008e1f44-56c0-44d2-994e-b07bd14c3435",
+                    "amount": 1000000,
+                    "transactionDate": "2025-04-30T17:00:00.000Z",
+                    "method": "Cash",
+                    "description": "testing masih hardcode",
+                    "transactionProofPath": null
+                }
+            ]
+        },
+        {
+            "id": "76147c9f-68de-4c9e-b9c1-994608d11bd4",
+            "periodStart": "2025-05-11T17:00:00.000Z",
+            "periodEnd": "2025-05-11T17:00:00.000Z",
+            "issueDate": "2025-05-11T17:00:00.000Z",
+            "dueDate": "2025-05-14T17:00:00.000Z",
+            "totalAmountDue": 1000000,
+            "totalAmountPaid": 1000000,
+            "status": "Paid",
+            "description": "Invoice for Perbaikan closet (Room 04)",
+            "createBy": null,
+            "updateBy": "aji.b.respati@gmail.com",
+            "createdAt": "2025-06-01T09:26:00.932Z",
+            "updatedAt": "2025-06-01T09:26:19.552Z",
+            "Room": {
+                "id": "22c7503c-1e31-4cec-ae9f-447ec9a0ba54",
+                "roomNumber": "04",
+                "BoardingHouse": {
+                    "id": "e3d94fb3-4e85-4d28-a5b2-9674e9662ab2",
+                    "name": "Residenza Solo"
+                }
+            },
+            "Tenant": {
+                "id": "5b0de4f3-d708-40de-9ef5-553c6f1b613b",
+                "name": "Ramjan",
+                "phone": "+6287701055665"
+            },
+            "Charges": [
+                {
+                    "id": "5956c465-8f35-4921-b8fa-5ca6311d360e",
+                    "name": "Perbaikan closet",
+                    "amount": 1000000,
+                    "description": "Perbaikan closet kamar 04 solo",
+                    "transactionType": "debit"
+                }
+            ],
+            "Transactions": [
+                {
+                    "id": "41627875-da62-4307-8703-4ffcccdc95e3",
+                    "amount": 1000000,
+                    "transactionDate": "2025-05-12T17:00:00.000Z",
+                    "method": "Cash",
+                    "description": "testing masih hardcode",
+                    "transactionProofPath": null
+                }
+            ]
+        }
+    ]
+}
