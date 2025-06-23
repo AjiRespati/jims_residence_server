@@ -8,6 +8,25 @@ const logger = require('../config/logger');
 const path = require("path");
 const fs = require("fs");
 
+// Helper function to delete a file safely (copied from updateTenant for completeness)
+const deleteFile = (filePath, logPrefix = 'File') => {
+    const fullPath = path.join(__dirname, '..', filePath);
+    if (!filePath || filePath === '/' || filePath.startsWith('..')) {
+        logger.warn(`⚠️ Attempted to delete invalid file path: ${filePath}`);
+        return;
+    }
+
+    fs.access(fullPath, fs.constants.F_OK, (err) => {
+        if (err) {
+            logger.warn(`⚠️ ${logPrefix} file not found for deletion: ${fullPath}`);
+        } else {
+            fs.unlink(fullPath, (err) => {
+                if (err) logger.error(`❌ Error deleting ${logPrefix} file: ${fullPath}`, err);
+                else logger.info(`🗑️ Deleted ${logPrefix} file: ${fullPath}`);
+            });
+        }
+    });
+};
 
 // Method for creating a new invoice (general purpose, allows null tenant/room)
 exports.createInvoice = async (req, res) => {
@@ -428,6 +447,11 @@ exports.updateInvoice = async (req, res) => {
         const invoice = await Invoice.findByPk(id); // , { transaction: t }
 
         if (!invoice) {
+            // If a file was uploaded for a non-existent invoice, clean it up
+            if (req.imagePath) {
+                deleteFile(req.imagePath, 'Uploaded NIK image');
+            }
+
             // await t.rollback();
             return res.status(404).json({
                 success: false,
@@ -461,6 +485,14 @@ exports.updateInvoice = async (req, res) => {
             return res.status(400).json({ success: false, message: 'Cannot change status from Paid except to Void.' });
         }
 
+        // Add the NIKImagePath if a file was uploaded by the middleware
+        if (req.imagePath) {
+            // Before setting the new path, consider deleting the old image file
+            if (fieldsToUpdate.invoicePaymentProofPath) {
+                deleteFile(fieldsToUpdate.invoicePaymentProofPath, 'Old image');
+            }
+            fieldsToUpdate.invoicePaymentProofPath = req.imagePath; // Set the new image path
+        }
 
         // 3. Update the invoice record
         // Only update if there are fields to update
@@ -480,7 +512,8 @@ exports.updateInvoice = async (req, res) => {
         const invoiceWithDetails = await Invoice.findByPk(updatedInvoice.id, {
             attributes: [
                 'id', 'periodStart', 'periodEnd', 'issueDate', 'dueDate', 'totalAmountDue',
-                'totalAmountPaid', 'status', 'description', 'createBy', 'updateBy', 'createdAt', 'updatedAt'
+                'totalAmountPaid', 'status', 'description', 'invoicePaymentProofPath',
+                'createBy', 'updateBy', 'createdAt', 'updatedAt'
             ],
             include: [
                 { model: Tenant, attributes: ['id', 'name'] }, // Include basic tenant info

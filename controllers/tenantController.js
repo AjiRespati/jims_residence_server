@@ -254,6 +254,7 @@ exports.getTenantById = async (req, res) => {
                         'totalAmountPaid',
                         'status',
                         'description',
+                        'invoicePaymentProofPath',
                         'createBy',
                         'updateBy'
                     ],
