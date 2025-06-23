@@ -10,7 +10,7 @@ module.exports = (sequelize, DataTypes) => {
         dueDate: { type: DataTypes.DATE, allowNull: false }, // 🔥 The date the invoice payment is due (replaces timelimit on Payment)
         totalAmountDue: { type: DataTypes.FLOAT, allowNull: false, defaultValue: 0 }, // Calculated sum of all linked Charges
         totalAmountPaid: { type: DataTypes.FLOAT, allowNull: false, defaultValue: 0 }, // Sum of related transactions/payments received
-        status: { type: DataTypes.ENUM('Draft', 'Issued', 'Unpaid', 'PartiallyPaid', 'Paid', 'Void'), allowNull: false, defaultValue: 'Issued' }, // 🔥 Status of the entire invoice (replaces paymentStatus on Payment)
+        status: { type: DataTypes.ENUM('Draft', 'Issued', 'Unpaid', 'PartiallyPaid', 'Paid', 'Void', 'Cancelled'), allowNull: false, defaultValue: 'Issued' }, // 🔥 Status of the entire invoice (replaces paymentStatus on Payment)
         description: { type: DataTypes.TEXT }, // Optional general description for the invoice
         invoicePaymentProofPath: { type: DataTypes.STRING }, // Proof for this transaction
         createBy: { type: DataTypes.STRING },
