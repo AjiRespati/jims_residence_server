@@ -12,6 +12,7 @@ module.exports = (sequelize, DataTypes) => {
         totalAmountPaid: { type: DataTypes.FLOAT, allowNull: false, defaultValue: 0 }, // Sum of related transactions/payments received
         status: { type: DataTypes.ENUM('Draft', 'Issued', 'Unpaid', 'PartiallyPaid', 'Paid', 'Void'), allowNull: false, defaultValue: 'Issued' }, // 🔥 Status of the entire invoice (replaces paymentStatus on Payment)
         description: { type: DataTypes.TEXT }, // Optional general description for the invoice
+        invoicePaymentProofPath: { type: DataTypes.STRING }, // Proof for this transaction
         createBy: { type: DataTypes.STRING },
         updateBy: { type: DataTypes.STRING },
     }, { timestamps: true });
