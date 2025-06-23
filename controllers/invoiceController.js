@@ -337,6 +337,7 @@ exports.getInvoiceById = async (req, res) => {
                 'totalAmountPaid',
                 'status',
                 'description',
+                'invoicePaymentProofPath',
                 'createBy',
                 'updateBy',
                 'createdAt',

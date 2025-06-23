@@ -313,7 +313,7 @@ exports.getFinancialOverview = async (req, res) => {
             attributes: [
                 'id', 'periodStart', 'periodEnd', 'issueDate', 'dueDate',
                 'totalAmountDue', 'totalAmountPaid', 'status', 'description',
-                'createBy', 'updateBy', 'createdAt', 'updatedAt'
+                'invoicePaymentProofPath', 'createBy', 'updateBy', 'createdAt', 'updatedAt'
             ],
             include: [
                 roomIncludeConfig,
@@ -466,7 +466,7 @@ exports.getFinancialTransactions = async (req, res) => {
             include: [
                 {
                     model: Invoice,
-                    attributes: ['id', 'status', 'periodStart', 'periodEnd', 'description'], // Get relevant invoice details
+                    attributes: ['id', 'status', 'periodStart', 'periodEnd', 'description', 'invoicePaymentProofPath'], // Get relevant invoice details
                     required: true, // Only get transactions linked to an invoice
                     include: [
                         { model: Tenant, attributes: ['id', 'name'], required: false }, // Include Tenant
@@ -508,7 +508,7 @@ exports.getFinancialTransactions = async (req, res) => {
             boardingHouseId: trans.Invoice.Room.BoardingHouse ? trans.Invoice.Room.BoardingHouse.id : 'N/A',
             sourceId: trans.Invoice.id, // The ID of the invoice being paid
             sourceModel: 'InvoicePayment', // Clearly indicate this is a payment for an invoice
-            proofPath: trans.transactionProofPath || null, // Add proof path
+            invoicePaymentProofPath: trans.Invoice.invoicePaymentProofPath || null, // Add proof path
             totalAmountPaid: parseFloat(trans.amount)
         }));
 
