@@ -9,10 +9,12 @@ const {
     createTenant,
     updateTenant,
     deleteTenant,
-    tenantCheckout
+    tenantCheckout,
+    searchTenants
 } = require('../controllers/tenantController');
 
 router.get('/', authMiddleware, getAllTenants);
+router.get('/search', authMiddleware, searchTenants);
 router.get('/:id', authMiddleware, getTenantById);
 router.post('/', authMiddleware, createTenant);
 router.put("/:id", authMiddleware, upload.single("image"), imageCompressor, updateTenant);
