@@ -1,4 +1,8 @@
-const { Price, BoardingHouse } = require('../models');
+const db = require("../models");
+const Sequelize = db.Sequelize;
+const { Op } = Sequelize;
+
+const { Price, BoardingHouse, Room, Tenant, Invoice, Charge, Transaction } = require('../models');
 const logger = require('../config/logger');
 
 exports.getAllPrices = async (req, res) => {
@@ -41,9 +45,78 @@ exports.getAllPrices = async (req, res) => {
 
 exports.getPriceById = async (req, res) => {
     try {
-        const data = await Price.findByPk(req.params.id);
+        const data = await Price.findByPk(req.params.id, {
+            include: [
+                {
+                    model: Room, // Include the associated Room
+                    attributes: ['id', 'roomNumber', 'roomSize', 'roomStatus'], // Select relevant Room attributes
+                    include: [
+                        {
+                            model: Tenant, // Include the associated BoardingHouse nested within Room
+                            include: {
+                                model: Invoice, // Include ALL associated Invoices for this tenant
+                                attributes: [ // Select relevant Invoice attributes
+                                    'id',
+                                    'periodStart',
+                                    'periodEnd',
+                                    'issueDate',
+                                    'dueDate', // This is the Invoice's due date
+                                    'totalAmountDue',
+                                    'totalAmountPaid',
+                                    'status',
+                                    'description',
+                                    'invoicePaymentProofPath',
+                                    'createBy',
+                                    'updateBy'
+                                ],
+                                required: false, // Use LEFT JOIN so tenants without invoices are also included
+                                order: [['issueDate', 'DESC']], // Optional: Order invoices, e.g., by most recent first
+                                separate: true,
+                                include: [
+                                    {
+                                        model: Charge, // Include the Charges within EACH Invoice
+                                        as: 'Charges', // Use the alias defined in the Invoice model association
+                                        attributes: [ // Select relevant Charge attributes
+                                            'id',
+                                            'name',
+                                            'amount',
+                                            'description',
+                                            'transactionType', // 'debit' or 'credit' for the line item
+                                            'createBy',
+                                            'updateBy'
+                                        ],
+                                        required: false // Use LEFT JOIN so invoices without charges (unlikely) are included
+                                    },
+                                    {
+                                        model: Transaction, // Include the Transaction within EACH Invoice
+                                        as: 'Transactions', // Use the alias defined in the Invoice model association
+                                        attributes: [ // Select relevant Transaction attributes
+                                            'id',
+                                            'amount',
+                                            'description',
+                                            'transactionDate',
+                                            'createBy',
+                                            'updateBy'
+                                        ],
+                                        required: false // Use LEFT JOIN so invoices without Transaction (unlikely) are included
+                                    }
+                                ]
+                            }
+                        }
+                    ],
+                    required: false // Use LEFT JOIN
+                },
+
+            ]
+        });
+
         if (!data) return res.status(404).json({ error: 'Price not found' });
-        res.json(data);
+
+        res.json({
+            success: true,
+            message: 'Get Price success',
+            data: data
+        });
     } catch (error) {
         logger.error(`❌ getPriceById error: ${error.message}`);
         logger.error(error.stack);
@@ -89,7 +162,86 @@ exports.updatePrice = async (req, res) => {
         if (!data) return res.status(404).json({ error: 'Price not found' });
 
         await data.update(req.body);
-        res.json(data);
+
+        const checkData = await Price.findByPk(req.params.id, {
+            include:
+            {
+                model: Room, // Include the associated Room
+                attributes: ['id'], // Select relevant Room attributes
+                include: [
+                    {
+                        model: Tenant, // Include the associated BoardingHouse nested within Room
+                        attributes: ['id', 'name'], // Select relevant Room attributes
+                        include: {
+                            model: Invoice, // Include ALL associated Invoices for this tenant
+                            attributes: [ // Select relevant Invoice attributes
+                                'id',
+                                'periodStart',
+                                'periodEnd',
+                                'issueDate',
+                                'dueDate', // This is the Invoice's due date
+                                'totalAmountDue',
+                                'totalAmountPaid',
+                                'status',
+                                'description',
+                                'invoicePaymentProofPath',
+                                'createBy',
+                                'updateBy'
+                            ],
+                            required: false, // Use LEFT JOIN so tenants without invoices are also included
+                            order: [['issueDate', 'DESC']], // Optional: Order invoices, e.g., by most recent first
+                            separate: true,
+                            where: {
+                                // These are statuses that typically indicate money is still owed
+                                status: {
+                                    [Op.notIn]: ['Paid', 'Void', 'Cancelled'], // Assuming 'Cancelled' is also a final, non-unpaid status
+                                },
+                            },
+                            include: [
+                                {
+                                    model: Charge, // Include the Charges within EACH Invoice
+                                    as: 'Charges', // Use the alias defined in the Invoice model association
+                                    attributes: [ // Select relevant Charge attributes
+                                        'id',
+                                        'name',
+                                        'amount',
+                                        'description',
+                                        'transactionType', // 'debit' or 'credit' for the line item
+                                        'createBy',
+                                        'updateBy'
+                                    ],
+                                    required: false // Use LEFT JOIN so invoices without charges (unlikely) are included
+                                },
+                                {
+                                    model: Transaction, // Include the Transaction within EACH Invoice
+                                    as: 'Transactions', // Use the alias defined in the Invoice model association
+                                    attributes: [ // Select relevant Transaction attributes
+                                        'id',
+                                        'amount',
+                                        'description',
+                                        'transactionDate',
+                                        'createBy',
+                                        'updateBy'
+                                    ],
+                                    required: false // Use LEFT JOIN so invoices without Transaction (unlikely) are included
+                                }
+                            ]
+                        }
+                    }
+                ],
+                required: false // Use LEFT JOIN
+            },
+        });
+
+        const priceData = checkData.toJSON();
+
+        console.log(`❌ updatePrice check: ${JSON.stringify(priceData.Rooms[0].Tenants[0].Invoices)}`);
+
+        res.json({
+            success: true,
+            message: 'Update Price success',
+            data: data
+        });
     } catch (error) {
         logger.error(`❌ updatePrice error: ${error.message}`);
         logger.error(error.stack);
