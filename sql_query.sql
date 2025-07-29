@@ -42,3 +42,7 @@ WHERE id = 'e1beae08-24a9-4d16-b3fa-8362ee3c0667';
 UPDATE "public"."Invoices"
 SET "dueDate" = '2025-05-28T00:00:00+07:00'
 WHERE id = 'ef9fa777-bb5d-4334-8fba-5751eabdfa2c';
+
+UPDATE "public"."Rooms"
+SET "priceId" = null
+WHERE id = '22c7503c-1e31-4cec-ae9f-447ec9a0ba54';

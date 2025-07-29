@@ -603,6 +603,7 @@ exports.updateTenant = async (req, res) => {
             'NIKNumber',
             'isNIKCopyDone',
             'tenancyStatus',
+            'checkinDate',
             'startDate',
             'endDate',
             'dueDate',
@@ -827,6 +828,7 @@ exports.tenantCheckout = async (req, res) => {
         await room.update(
             {
                 roomStatus: 'Tersedia', // This is the corrected attribute name
+                priceId: null,
                 updateBy: req.user ? req.user.name : 'System/Admin Checkout',
             },
             { transaction } // Pass transaction to the update operation
@@ -861,5 +863,38 @@ exports.tenantCheckout = async (req, res) => {
         logger.error(`❌ Error during tenant checkout for tenant ${tenantId}: ${error.message}`);
         logger.error(error.stack); // Log the full stack trace for debugging
         return res.status(500).json({ success: false, message: 'Failed to process tenant checkout.', error: error.message });
+    }
+};
+
+exports.searchTenants = async (req, res) => {
+    try {
+        const { query } = req.query; // Get the search query from the URL (e.g., /api/tenants/search?query=john)
+
+        if (!query) {
+            return res.status(400).json({ success: false, message: 'Search query is required.' });
+        }
+
+        const tenants = await Tenant.findAll({
+            where: {
+                [Op.or]: [
+                    { name: { [Op.iLike]: `%${query}%` } }, // Case-insensitive search for name
+                    { phone: { [Op.iLike]: `%${query}%` } }, // Case-insensitive search for phone
+                    { NIKNumber: { [Op.iLike]: `%${query}%` } } // Case-insensitive search for NIKNumber
+                ]
+            },
+            limit: 10, // Limit the number of results for autocomplete efficiency
+            order: [['name', 'ASC']] // Order results by name for consistency
+        });
+
+        res.status(200).json({
+            success: true,
+            message: 'Tenant query response',
+            data: tenants // Send the nested data
+        });
+    } catch (error) {
+        console.error('Error searching tenants:', error);
+        res.status(500).json({
+            success: false, message: 'Internal server error', error: error.message
+        });
     }
 };
