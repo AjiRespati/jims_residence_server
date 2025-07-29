@@ -603,6 +603,7 @@ exports.updateTenant = async (req, res) => {
             'NIKNumber',
             'isNIKCopyDone',
             'tenancyStatus',
+            'checkinDate',
             'startDate',
             'endDate',
             'dueDate',
