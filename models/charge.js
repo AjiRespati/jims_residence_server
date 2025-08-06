@@ -3,6 +3,7 @@ module.exports = (sequelize, DataTypes) => {
     // This model represents a single charge or line item on an Invoice
     const Charge = sequelize.define("Charge", { // 🔥 Model renamed from "Payment" to "Charge"
         id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
+        priceId: { type: DataTypes.UUID, allowNull: true }, // Context: which price this invoice covers
         invoiceId: { type: DataTypes.UUID, allowNull: false }, // 🔥 New FK linking THIS charge to an Invoice
 
         // tenantId, totalAmount, transactionName, transactionType, transactionImagePath,
