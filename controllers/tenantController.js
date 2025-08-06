@@ -455,6 +455,7 @@ exports.createTenant = async (req, res) => {
         const firstInvoice = await Invoice.create({
             tenantId: newTenant.id,
             roomId: room.id,
+            priceId: newPrice.id,
             periodStart: firstInvoicePeriodStart,
             periodEnd: firstInvoicePeriodEnd,
             issueDate: checkinDate, // Invoice is issued on check-in date
@@ -473,6 +474,7 @@ exports.createTenant = async (req, res) => {
         let calculatedTotalAmountDue = 0;
 
         chargesToCreate.push({
+            priceId: newPrice.id,
             invoiceId: firstInvoice.id,
             name: newPrice.name,
             amount: newPrice.amount,
@@ -485,6 +487,7 @@ exports.createTenant = async (req, res) => {
 
         for (const ap of createdAdditionalPrices) {
             chargesToCreate.push({
+                priceId: null,
                 invoiceId: firstInvoice.id,
                 name: ap.name,
                 amount: ap.amount,
@@ -498,6 +501,7 @@ exports.createTenant = async (req, res) => {
 
         for (const oc of createdOtherCosts) {
             chargesToCreate.push({
+                priceId: null,
                 invoiceId: firstInvoice.id,
                 name: oc.name,
                 amount: oc.amount,

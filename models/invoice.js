@@ -4,6 +4,7 @@ module.exports = (sequelize, DataTypes) => {
         id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
         tenantId: { type: DataTypes.UUID, allowNull: true }, // Link to the tenant this invoice is for
         roomId: { type: DataTypes.UUID, allowNull: true }, // Context: which room this invoice covers
+        priceId: { type: DataTypes.UUID, allowNull: true }, // Context: which price this invoice covers
         periodStart: { type: DataTypes.DATE, allowNull: false }, // Start date of the billing period covered
         periodEnd: { type: DataTypes.DATE, allowNull: false }, // End date of the billing period covered
         issueDate: { type: DataTypes.DATE, allowNull: false }, // The date the invoice was generated
