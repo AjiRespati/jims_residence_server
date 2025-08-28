@@ -8,7 +8,7 @@ exports.getAllPayments = async (req, res) => {
     } catch (error) {
         logger.error(`❌ getAllPayments error: ${error.message}`);
         logger.error(error.stack);
-        res.status(500).json({ error: 'Internal Server Error' });
+        res.status(500).json({ message: error.message, error: 'Internal Server Error' });
     }
 };
 
@@ -20,7 +20,7 @@ exports.getPaymentById = async (req, res) => {
     } catch (error) {
         logger.error(`❌ getPaymentById error: ${error.message}`);
         logger.error(error.stack);
-        res.status(500).json({ error: 'Internal Server Error' });
+        res.status(500).json({ message: error.message, error: 'Internal Server Error' });
     }
 };
 
@@ -59,6 +59,6 @@ exports.deletePayment = async (req, res) => {
     } catch (error) {
         logger.error(`❌ deletePayment error: ${error.message}`);
         logger.error(error.stack);
-        res.status(500).json({ error: 'Internal Server Error' });
+        res.status(500).json({ message: error.message, error: 'Internal Server Error' });
     }
 };

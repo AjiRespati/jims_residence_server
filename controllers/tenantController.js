@@ -532,7 +532,7 @@ exports.createTenant = async (req, res) => {
         }
         logger.error(`❌ createTenant error: ${error.message}`);
         logger.error(error.stack);
-        return res.status(500).json({ message: 'Internal server error', error: error.message });
+        return res.status(500).json({ message: error.message, error: 'Internal server error' });
     }
 
     // Post-commit fetch for the response
@@ -701,7 +701,7 @@ exports.updateTenant = async (req, res) => {
             }, 100); // Small delay
         }
         // await t.rollback(); // Rollback transaction if used
-        res.status(500).json({ message: 'Internal Server Error', error: error.message });
+        res.status(500).json({ message: error.message, error: 'Internal Server Error' });
     }
 };
 

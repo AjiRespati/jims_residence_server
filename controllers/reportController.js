@@ -214,7 +214,7 @@ exports.getMonthlyFinancialReport = async (req, res) => {
     } catch (error) {
         logger.error(`❌ getMonthlyFinancialReport error: ${error.message}`);
         logger.error(error.stack);
-        res.status(500).json({ success: false, message: 'Internal Server Error', error: error.message });
+        res.status(500).json({ success: false, message: error.message, error: 'Internal Server Error' });
     }
 };
 
@@ -405,7 +405,7 @@ exports.getFinancialOverview = async (req, res) => {
     } catch (error) {
         logger.error(`❌ getFinancialOverview error: ${error.message}`);
         logger.error(error.stack);
-        res.status(500).json({ success: false, message: 'Internal Server Error', error: error.message });
+        res.status(500).json({ success: false,  message: error.message, error: 'Internal Server Error' });
     }
 };
 
@@ -591,6 +591,6 @@ exports.getFinancialTransactions = async (req, res) => {
     } catch (error) {
         logger.error(`❌ Error fetching financial transactions: ${error.message}`);
         logger.error(error.stack);
-        res.status(500).json({ success: false, message: 'Internal server error', error: error.message });
+        res.status(500).json({ success: false, message: error.message, error: 'Internal Server Error'  });
     }
 };

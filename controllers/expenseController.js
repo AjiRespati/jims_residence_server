@@ -21,20 +21,20 @@ const path = require('path'); // Import path module
 const deleteFile = (filePath, logPrefix = 'File') => {
     const fullPath = path.join(__dirname, '..', filePath);
     if (!filePath || filePath === '/' || filePath.startsWith('..')) {
-         logger.warn(`⚠️ Attempted to delete invalid file path: ${filePath}`);
-         return;
+        logger.warn(`⚠️ Attempted to delete invalid file path: ${filePath}`);
+        return;
     }
 
-     fs.access(fullPath, fs.constants.F_OK, (err) => {
+    fs.access(fullPath, fs.constants.F_OK, (err) => {
         if (err) {
             logger.warn(`⚠️ ${logPrefix} file not found for deletion: ${fullPath}`);
         } else {
-             fs.unlink(fullPath, (err) => {
-                 if (err) logger.error(`❌ Error deleting ${logPrefix} file: ${fullPath}`, err);
-                 else logger.info(`🗑️ Deleted ${logPrefix} file: ${fullPath}`);
-             });
+            fs.unlink(fullPath, (err) => {
+                if (err) logger.error(`❌ Error deleting ${logPrefix} file: ${fullPath}`, err);
+                else logger.info(`🗑️ Deleted ${logPrefix} file: ${fullPath}`);
+            });
         }
-     });
+    });
 };
 
 
@@ -67,12 +67,12 @@ exports.createExpense = async (req, res) => {
             return res.status(400).json({ message: 'Amount must be a positive number' });
         }
 
-         // Ensure expenseDate is a valid date
-         const expDate = new Date(expenseDate);
-         if (isNaN(expDate.getTime())) {
-             // await t.rollback();
-             return res.status(400).json({ message: 'Invalid expenseDate format' });
-         }
+        // Ensure expenseDate is a valid date
+        const expDate = new Date(expenseDate);
+        if (isNaN(expDate.getTime())) {
+            // await t.rollback();
+            return res.status(400).json({ message: 'Invalid expenseDate format' });
+        }
 
         // Validate Boarding House exists
         const boardingHouse = await BoardingHouse.findByPk(boardingHouseId); // , { transaction: t }
@@ -120,17 +120,17 @@ exports.createExpense = async (req, res) => {
         // await t.rollback(); // Rollback transaction if used
         logger.error(`❌ createExpense error: ${error.message}`);
         logger.error(error.stack);
-         // Optional: If an error occurred *after* middleware uploaded a file, clean it up.
-         if (req.proofPath) {
-               const fullPath = path.join(__dirname, '..', req.proofPath);
-               setTimeout(() => {
-                    fs.unlink(fullPath, (err) => {
-                        if (err) logger.error(`❌ Error deleting uploaded proof after expense error: ${fullPath}`, err);
-                        else logger.info(`🗑️ Deleted uploaded proof after expense error: ${fullPath}`);
-                    });
-               }, 100); // Small delay
-         }
-        res.status(500).json({ message: 'Internal server error', error: error.message });
+        // Optional: If an error occurred *after* middleware uploaded a file, clean it up.
+        if (req.proofPath) {
+            const fullPath = path.join(__dirname, '..', req.proofPath);
+            setTimeout(() => {
+                fs.unlink(fullPath, (err) => {
+                    if (err) logger.error(`❌ Error deleting uploaded proof after expense error: ${fullPath}`, err);
+                    else logger.info(`🗑️ Deleted uploaded proof after expense error: ${fullPath}`);
+                });
+            }, 100); // Small delay
+        }
+        res.status(500).json({ message: error.message, error: 'Internal Server Error' });
     }
 };
 
@@ -152,18 +152,18 @@ exports.getAllExpenses = async (req, res) => {
 
         // Filter by Category
         if (category) {
-             expenseWhere.category = category;
-             isFilterApplied = true;
+            expenseWhere.category = category;
+            isFilterApplied = true;
         }
 
 
-         // Add date filter if dateFrom and dateTo are provided and valid
+        // Add date filter if dateFrom and dateTo are provided and valid
         if (dateFrom && dateTo) {
             const fromDate = new Date(dateFrom);
             const toDate = new Date(dateTo);
 
             if (!isNaN(fromDate.getTime()) && !isNaN(toDate.getTime())) {
-                 // Adjust toDate to include the entire end day
+                // Adjust toDate to include the entire end day
                 toDate.setHours(23, 59, 59, 999);
 
                 expenseWhere.expenseDate = { // Filtering by Expense's expenseDate
@@ -171,44 +171,44 @@ exports.getAllExpenses = async (req, res) => {
                 };
                 isFilterApplied = true;
             } else {
-                 // Handle invalid date formats
-                 return res.status(400).json({
-                     success: false,
-                     message: 'Invalid date format for dateFrom or dateTo. UseYYYY-MM-DD.',
-                     data: null
-                 });
+                // Handle invalid date formats
+                return res.status(400).json({
+                    success: false,
+                    message: 'Invalid date format for dateFrom or dateTo. UseYYYY-MM-DD.',
+                    data: null
+                });
             }
         } else if (dateFrom) {
-             // Handle only dateFrom provided
-             const fromDate = new Date(dateFrom);
-             if (!isNaN(fromDate.getTime())) {
-                 expenseWhere.expenseDate = { // Filtering by Expense's expenseDate
-                     [Op.gte]: fromDate
-                 };
-                 isFilterApplied = true;
-             } else {
-                 return res.status(400).json({
-                     success: false,
-                     message: 'Invalid date format for dateFrom. UseYYYY-MM-DD.',
-                     data: null
-                 });
-             }
+            // Handle only dateFrom provided
+            const fromDate = new Date(dateFrom);
+            if (!isNaN(fromDate.getTime())) {
+                expenseWhere.expenseDate = { // Filtering by Expense's expenseDate
+                    [Op.gte]: fromDate
+                };
+                isFilterApplied = true;
+            } else {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Invalid date format for dateFrom. UseYYYY-MM-DD.',
+                    data: null
+                });
+            }
         } else if (dateTo) {
-             // Handle only dateTo provided
-             const toDate = new Date(dateTo);
-             if (!isNaN(toDate.getTime())) {
-                 toDate.setHours(23, 59, 59, 999); // Include the entire end day
-                 expenseWhere.expenseDate = { // Filtering by Expense's expenseDate
-                     [Op.lte]: toDate
-                 };
-                 isFilterApplied = true;
-             } else {
-                 return res.status(400).json({
-                     success: false,
-                     message: 'Invalid date format for dateTo. UseYYYY-MM-DD.',
-                     data: null
-                 });
-             }
+            // Handle only dateTo provided
+            const toDate = new Date(dateTo);
+            if (!isNaN(toDate.getTime())) {
+                toDate.setHours(23, 59, 59, 999); // Include the entire end day
+                expenseWhere.expenseDate = { // Filtering by Expense's expenseDate
+                    [Op.lte]: toDate
+                };
+                isFilterApplied = true;
+            } else {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Invalid date format for dateTo. UseYYYY-MM-DD.',
+                    data: null
+                });
+            }
         }
 
 
@@ -226,10 +226,10 @@ exports.getAllExpenses = async (req, res) => {
         });
 
         let message = 'Expenses retrieved successfully';
-         if (isFilterApplied) {
-             message = 'Expenses retrieved successfully with filters applied';
-             // You could make the message more specific based on which filters were used
-         }
+        if (isFilterApplied) {
+            message = 'Expenses retrieved successfully with filters applied';
+            // You could make the message more specific based on which filters were used
+        }
 
 
         res.status(200).json({
@@ -241,7 +241,7 @@ exports.getAllExpenses = async (req, res) => {
     } catch (error) {
         logger.error(`❌ getAllExpenses error: ${error.message}`);
         logger.error(error.stack);
-        res.status(500).json({ error: 'Internal Server Error' });
+        res.status(500).json({ message: error.message, error: 'Internal Server Error' });
     }
 };
 
@@ -259,11 +259,11 @@ exports.getExpenseById = async (req, res) => {
         }
 
         const expense = await Expense.findByPk(id, {
-             attributes: [
+            attributes: [
                 'id', 'boardingHouseId', 'category', 'name', 'amount', 'expenseDate',
                 'paymentMethod', 'proofPath', 'description', 'createBy', 'updateBy', 'createdAt', 'updatedAt'
             ],
-             include: [
+            include: [
                 { model: BoardingHouse, attributes: ['id', 'name', 'address'] }
             ]
         });
@@ -285,7 +285,7 @@ exports.getExpenseById = async (req, res) => {
     } catch (error) {
         logger.error(`❌ getExpenseById error: ${error.message}`);
         logger.error(error.stack);
-        res.status(500).json({ error: 'Internal Server Error' });
+        res.status(500).json({ message: error.message, error: 'Internal Server Error' });
     }
 };
 
