@@ -151,7 +151,7 @@ exports.createInvoice = async (req, res) => {
         await t.rollback();
         logger.error(`❌ createInvoice error: ${error.message}`);
         logger.error(error.stack);
-        res.status(500).json({ message: 'Internal server error', error: error.message });
+        res.status(500).json({ message: error.message, error: 'Internal Server Error' });
     }
 };
 
@@ -307,7 +307,7 @@ exports.getAllInvoices = async (req, res) => {
     } catch (error) {
         logger.error(`❌ getAllInvoices error: ${error.message}`);
         logger.error(error.stack);
-        res.status(500).json({ error: 'Internal Server Error' });
+        res.status(500).json({ message: error.message, error: 'Internal Server Error' });
     }
 };
 
@@ -419,7 +419,7 @@ exports.getInvoiceById = async (req, res) => {
     } catch (error) {
         logger.error(`❌ getInvoiceById error: ${error.message}`);
         logger.error(error.stack);
-        res.status(500).json({ error: 'Internal Server Error' });
+        res.status(500).json({ message: error.message, error: 'Internal Server Error' });
     }
 };
 
@@ -539,7 +539,7 @@ exports.updateInvoice = async (req, res) => {
         logger.error(`❌ updateInvoice error: ${error.message}`);
         logger.error(error.stack);
         // await t.rollback(); // Rollback transaction if used
-        res.status(500).json({ error: 'Internal Server Error', error: error.message });
+        res.status(500).json({ message: error.message, error: 'Internal Server Error' });
     }
 };
 
@@ -606,7 +606,7 @@ exports.deleteInvoice = async (req, res) => {
         await t.rollback(); // Rollback transaction
         logger.error(`❌ deleteInvoice error: ${error.message}`);
         logger.error(error.stack);
-        res.status(500).json({ error: 'Internal Server Error' });
+        res.status(500).json({ message: error.message, error: 'Internal Server Error' });
     }
 };
 
@@ -621,6 +621,6 @@ exports.hardDeleteInvoice = async (req, res) => {
     } catch (error) {
         logger.error(`❌ deleteInvoice error: ${error.message}`);
         logger.error(error.stack);
-        res.status(500).json({ error: 'Internal Server Error' });
+        res.status(500).json({ message: error.message, error: 'Internal Server Error' });
     }
 };

@@ -12,7 +12,7 @@ exports.getAllAdditionalPrices = async (req, res) => {
     } catch (error) {
         logger.error(`❌ getAllAdditionalPrices error: ${error.message}`);
         logger.error(error.stack);
-        res.status(500).json({ error: 'Internal Server Error' });
+        res.status(500).json({ message: error.message, error: 'Internal Server Error' });
     }
 };
 
@@ -24,7 +24,7 @@ exports.getAdditionalPriceById = async (req, res) => {
     } catch (error) {
         logger.error(`❌ getAdditionalPriceById error: ${error.message}`);
         logger.error(error.stack);
-        res.status(500).json({ error: 'Internal Server Error' });
+        res.status(500).json({ message: error.message, error: 'Internal Server Error' });
     }
 };
 
@@ -63,6 +63,6 @@ exports.deleteAdditionalPrice = async (req, res) => {
     } catch (error) {
         logger.error(`❌ deleteAdditionalPrice error: ${error.message}`);
         logger.error(error.stack);
-        res.status(500).json({ error: 'Internal Server Error' });
+        res.status(500).json({ message: error.message, error: 'Internal Server Error' });
     }
 };

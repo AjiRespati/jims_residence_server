@@ -191,7 +191,7 @@ exports.getAllRooms = async (req, res) => {
     } catch (error) {
         logger.error(`❌ getAllRooms error: ${error.message}`);
         logger.error(error.stack);
-        res.status(500).json({ error: 'Internal Server Error' });
+        res.status(500).json({ message: error.message, error: 'Internal Server Error' });
     }
 };
 
@@ -313,7 +313,7 @@ exports.getRoomById = async (req, res) => {
     } catch (error) {
         logger.error(`❌ getRoomById error: ${error.message}`);
         logger.error(error.stack);
-        res.status(500).json({ error: 'Internal Server Error' });
+        res.status(500).json({ message: error.message, error: 'Internal Server Error' });
     }
 };
 
@@ -535,6 +535,6 @@ exports.deleteRoom = async (req, res) => {
     } catch (error) {
         logger.error(`❌ deleteRoom error: ${error.message}`);
         logger.error(error.stack);
-        res.status(500).json({ error: 'Internal Server Error' });
+        res.status(500).json({ message: error.message, error: 'Internal Server Error' });
     }
 };

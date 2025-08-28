@@ -59,7 +59,7 @@ exports.login = async (req, res) => {
         res.json({ accessToken, refreshToken });
     } catch (error) {
         console.error(error);
-        res.status(500).json({ message: 'Internal server error' });
+        res.status(500).json({ message: error.message, error: 'Internal Server Error' });
     }
 };
 
@@ -82,7 +82,7 @@ exports.refreshToken = async (req, res) => {
         });
     } catch (error) {
         console.error(error);
-        res.status(500).json({ message: 'Internal server error' });
+        res.status(500).json({ message: error.message, error: 'Internal Server Error' });
     }
 };
 
@@ -102,7 +102,7 @@ exports.logout = async (req, res) => {
         res.json({ message: 'Logged out successfully' });
     } catch (error) {
         console.error(error);
-        res.status(500).json({ message: 'Internal server error' });
+        res.status(500).json({ message: error.message, error: 'Internal Server Error' });
     }
 };
 
@@ -130,7 +130,7 @@ exports.self = async (req, res) => {
         });
     } catch (error) {
         console.error(error);
-        res.status(500).json({ message: 'Internal server error' });
+        res.status(500).json({ message: error.message, error: 'Internal Server Error' });
     }
 };
 
@@ -189,7 +189,7 @@ exports.generic = async (req, res) => {
 
     } catch (error) {
         console.error(error);
-        res.status(500).json({ message: `Failed removing: ${table}, ${error}` });
+        res.status(500).json({ message: `Failed removing: ${table}, ${error}`, error: 'internal server error' });
     }
 };
 

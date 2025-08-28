@@ -336,6 +336,7 @@ exports.getTenantById = async (req, res) => {
 exports.createTenant = async (req, res) => {
     let t;
     let newTenant;
+    let existingTenant;
 
     try {
         t = await sequelize.transaction();
@@ -369,6 +370,16 @@ exports.createTenant = async (req, res) => {
             await t.rollback();
             return res.status(400).json({ message: 'Invalid date format' });
         }
+
+        existingTenant = await Tenant.findOne({
+            where: {
+                tenancyStatus: 'Inactive',
+                [Op.or]: [
+                    { phone: phone },
+                    { NIKNumber: NIKNumber }
+                ]
+            }
+        }, { transaction: t });
 
         const room = await Room.findByPk(roomId, { transaction: t });
         if (!room) {
@@ -431,29 +442,43 @@ exports.createTenant = async (req, res) => {
         firstInvoicePeriodEnd = isLastDayOfMonth(firstInvoicePeriodStart) ? endOfMonth(firstInvoicePeriodEnd) : subDays(firstInvoicePeriodEnd, 1);
 
         // Create the Tenant record
-        newTenant = await Tenant.create({
-            roomId,
-            name,
-            phone,
-            NIKNumber,
-            // Use checkinDate for the tenant's actual move-in date.
-            // startDate and endDate will now represent the *period* for the first invoice/lease.
-            startDate: firstInvoicePeriodStart, // The start of their first billing period
-            endDate: firstInvoicePeriodEnd,     // The end of their first billing period
-            checkoutDate: null, // Ensure this is null on creation
-            dueDate: invoiceDueDate,
-            banishDate,
-            checkinDate: firstInvoicePeriodStart,
-            NIKImagePath,
-            isNIKCopyDone,
-            tenancyStatus: tenancyStatus || 'Active', // Default to 'Active'
-            createBy: req.user.username,
-            updateBy: req.user.username
-        }, { transaction: t });
+        if (existingTenant) {
+            await existingTenant.update({
+                roomId,
+                tenancyStatus: 'Active',
+                startDate: firstInvoicePeriodStart,
+                endDate: firstInvoicePeriodEnd,
+                checkoutDate: null,
+                dueDate: invoiceDueDate,
+                banishDate,
+                checkinDate: firstInvoicePeriodStart,
+                updateBy: req.user.username
+            }, { transaction: t });
+        } else {
+            newTenant = await Tenant.create({
+                roomId,
+                name,
+                phone,
+                NIKNumber,
+                // Use checkinDate for the tenant's actual move-in date.
+                // startDate and endDate will now represent the *period* for the first invoice/lease.
+                startDate: firstInvoicePeriodStart, // The start of their first billing period
+                endDate: firstInvoicePeriodEnd,     // The end of their first billing period
+                checkoutDate: null, // Ensure this is null on creation
+                dueDate: invoiceDueDate,
+                banishDate,
+                checkinDate: firstInvoicePeriodStart,
+                NIKImagePath,
+                isNIKCopyDone,
+                tenancyStatus: tenancyStatus || 'Active', // Default to 'Active'
+                createBy: req.user.username,
+                updateBy: req.user.username
+            }, { transaction: t });
+        }
 
         // Create the first invoice
         const firstInvoice = await Invoice.create({
-            tenantId: newTenant.id,
+            tenantId: existingTenant ? existingTenant.id : newTenant.id,
             roomId: room.id,
             priceId: newPrice.id,
             periodStart: firstInvoicePeriodStart,
@@ -532,12 +557,12 @@ exports.createTenant = async (req, res) => {
         }
         logger.error(`❌ createTenant error: ${error.message}`);
         logger.error(error.stack);
-        return res.status(500).json({ message: 'Internal server error', error: error.message });
+        return res.status(500).json({ message: error.message, error: 'Internal server error' });
     }
 
     // Post-commit fetch for the response
     try {
-        const tenantWithDetails = await Tenant.findByPk(newTenant.id, {
+        const tenantWithDetails = await Tenant.findByPk(existingTenant ? existingTenant.id : newTenant.id, {
             include: [
                 {
                     model: Room,
@@ -701,7 +726,7 @@ exports.updateTenant = async (req, res) => {
             }, 100); // Small delay
         }
         // await t.rollback(); // Rollback transaction if used
-        res.status(500).json({ message: 'Internal Server Error', error: error.message });
+        res.status(500).json({ message: error.message, error: 'Internal Server Error' });
     }
 };
 

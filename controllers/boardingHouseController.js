@@ -56,7 +56,7 @@ exports.getAllBoardingHouses = async (req, res) => {
     } catch (error) {
         logger.error(`❌ getAllBoardingHouses error: ${error.message}`);
         logger.error(error.stack);
-        res.status(500).json({ error: 'Internal Server Error' });
+        res.status(500).json({ message: error.message, error: 'Internal Server Error' });
     }
 };
 
@@ -68,7 +68,7 @@ exports.getBoardingHouseById = async (req, res) => {
     } catch (error) {
         logger.error(`❌ getBoardingHouseById error: ${error.message}`);
         logger.error(error.stack);
-        res.status(500).json({ error: 'Internal Server Error' });
+        res.status(500).json({ message: error.message, error: 'Internal Server Error' });
     }
 };
 
@@ -79,7 +79,7 @@ exports.createBoardingHouse = async (req, res) => {
     } catch (error) {
         logger.error(`❌ createBoardingHouse error: ${error.message}`);
         logger.error(error.stack);
-        res.status(500).json({ error: error.message });
+        res.status(500).json({ message: error.message, error: 'Internal Server Error' });
     }
 };
 
@@ -108,6 +108,6 @@ exports.deleteBoardingHouse = async (req, res) => {
     } catch (error) {
         logger.error(`❌ deleteBoardingHouse error: ${error.message}`);
         logger.error(error.stack);
-        res.status(500).json({ error: 'Internal Server Error' });
+        res.status(500).json({ message: error.message, error: 'Internal Server Error' });
     }
 };
