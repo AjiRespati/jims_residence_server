@@ -35,7 +35,6 @@ const deleteFile = (filePath, logPrefix = 'File') => {
     });
 };
 
-
 exports.getAllTenants = async (req, res) => {
     try {
         const { boardingHouseId, dateFrom, dateTo } = req.query;
@@ -258,6 +257,11 @@ exports.getTenantById = async (req, res) => {
                         'createBy',
                         'updateBy'
                     ],
+                    where: {
+                        status: {
+                            [Op.notIn]: ['Void', 'Cancelled'], // Assuming 'Cancelled' is also a final, non-unpaid status
+                        },
+                    },
                     required: false, // Use LEFT JOIN so tenants without invoices are also included
                     order: [['issueDate', 'DESC']], // Optional: Order invoices, e.g., by most recent first
                     separate: true,

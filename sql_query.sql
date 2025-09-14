@@ -80,5 +80,15 @@ SET "NIKNumber" = 'NIKNumber07', "phone" = 'phone07'
 WHERE id = '5cdf716c-6f86-4abe-b2b3-a934b9c72b02';
 
 
+-------------------------------------
+-- UPDATE USER LEVEL               --
+-------------------------------------
+
+UPDATE "public"."Users"
+SET "levelDesc" = 'Pemilik', "level" = 2
+WHERE id = 'b9f0e8f6-3b8b-4dcb-bfde-3fb4a02db852';
+
+
+
 
 
