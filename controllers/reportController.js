@@ -56,6 +56,17 @@ exports.getMonthlyFinancialReport = async (req, res) => {
             boardingHouseConditions.id = boardingHouseId;
             isBoardingHouseFilterApplied = true;
         }
+        
+        // --- Fetch Filtered Invoices (filtered by Transaction.transactionDate) ---
+        // Invoice where clause will now only filter by status, not date
+        const invoiceStatusWhere = {
+            // We want 'Paid' and 'PartiallyPaid' invoices if filtering by transaction dates,
+            // as these are the ones that have actual transactions.
+            // If no date filter, we might want 'Issued', 'Unpaid' too, but for financial overview
+            // linked to payments, Paid/PartiallyPaid is more relevant.
+            // Adjust this array if other statuses also represent collected money.
+            status: { [Op.in]: ['Paid', 'PartiallyPaid'] }
+        };
 
         // --- Fetch Income (from Transactions) ---
         // Base options for Transaction query
@@ -70,6 +81,7 @@ exports.getMonthlyFinancialReport = async (req, res) => {
             include: [
                 {
                     model: Invoice,
+                    where: invoiceStatusWhere, // Apply invoice status filter
                     attributes: [],
                     required: true,
                     include: [
@@ -453,6 +465,17 @@ exports.getFinancialTransactions = async (req, res) => {
         }
         const isBoardingHouseFilterActive = !!boardingHouseId; // Convert to boolean
 
+        // --- Fetch Filtered Invoices (filtered by Transaction.transactionDate) ---
+        // Invoice where clause will now only filter by status, not date
+        const invoiceStatusWhere = {
+            // We want 'Paid' and 'PartiallyPaid' invoices if filtering by transaction dates,
+            // as these are the ones that have actual transactions.
+            // If no date filter, we might want 'Issued', 'Unpaid' too, but for financial overview
+            // linked to payments, Paid/PartiallyPaid is more relevant.
+            // Adjust this array if other statuses also represent collected money.
+            status: { [Op.in]: ['Paid', 'PartiallyPaid'] }
+        };
+
         // --- Query Transactions (Payments - this is actual income/money received) ---
         // Filter Transactions by their transactionDate and optional BoardingHouse
         const transactions = await Transaction.findAll({
@@ -466,6 +489,7 @@ exports.getFinancialTransactions = async (req, res) => {
             include: [
                 {
                     model: Invoice,
+                    where: invoiceStatusWhere, // Apply invoice status filter
                     attributes: ['id', 'status', 'periodStart', 'periodEnd', 'description', 'invoicePaymentProofPath'], // Get relevant invoice details
                     required: true, // Only get transactions linked to an invoice
                     include: [
