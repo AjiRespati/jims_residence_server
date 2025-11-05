@@ -10,7 +10,7 @@ const { startBillingTask } = require('./tasks/billingTasks'); // Adjust the path
 const app = express();
 
 //TODO: VERSIONING
-const version = "1.2.1";
+const version = "1.2.2";
 
 // ✅ Middlewares
 app.use(cors());
