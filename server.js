@@ -33,6 +33,7 @@ const invoiceRoutes = require("./routes/invoiceRoutes");
 const transactionRoutes = require("./routes/transactionRoutes");
 const userRoutes = require("./routes/userRoutes");
 const expenseRoutes = require("./routes/expenseRoutes");
+const transferOwnerRoutes = require("./routes/transferOwnerRoutes");
 const reportRoutes = require("./routes/reportRoutes");
 
 const base = "/service";
@@ -59,6 +60,7 @@ app.use(`${base}/api/invoice`, invoiceRoutes);
 app.use(`${base}/api/transaction`, transactionRoutes);
 app.use(`${base}/api/user`, userRoutes);
 app.use(`${base}/api/expense`, expenseRoutes);
+app.use(`${base}/api/transferOwner`, transferOwnerRoutes);
 app.use(`${base}/api/report`, reportRoutes);
 
 // ✅ Sync Database & Start Server
