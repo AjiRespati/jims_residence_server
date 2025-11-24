@@ -49,17 +49,25 @@ exports.createTransferOwner = async (req, res) => {
             amount,
             transferDate,
             description, // Optional
-            // proofPath is assumed to be set by middleware on req.proofPath
         } = req.body;
 
         // Validate required fields
         if (!boardingHouseId ||  amount === undefined || amount === null || !transferDate) {
+            // If a file was uploaded for a non-existent transfer owner, clean it up
+            if (req.imagePath) {
+                deleteFile(req.imagePath, 'transfer owner image');
+            }
             // await t.rollback();
-            return res.status(400).json({ message: 'Required transferOwner fields are missing: boardingHouseId, name, amount, transferDate, paymentMethod' });
+            return res.status(400).json({ message: 'Required transferOwner fields are missing: boardingHouseId, name, amount, transferDate' });
         }
 
-        // Ensure amount is a positive number
-        if (typeof amount !== 'number' || amount <= 0) {
+        const transferAmount = +amount;
+        // Ensure transferAmount is a positive number
+        if (typeof transferAmount !== 'number' || transferAmount <= 0) {
+            // If a file was uploaded for a non-existent transfer owner, clean it up
+            if (req.imagePath) {
+                deleteFile(req.imagePath, 'transfer owner image');
+            }
             // await t.rollback();
             return res.status(400).json({ message: 'Amount must be a positive number' });
         }
@@ -67,6 +75,10 @@ exports.createTransferOwner = async (req, res) => {
         // Ensure transferDate is a valid date
         const transDate = new Date(transferDate);
         if (isNaN(transDate.getTime())) {
+            // If a file was uploaded for a non-existent transfer owner, clean it up
+            if (req.imagePath) {
+                deleteFile(req.imagePath, 'transfer owner image');
+            }
             // await t.rollback();
             return res.status(400).json({ message: 'Invalid transferDate format' });
         }
@@ -74,22 +86,24 @@ exports.createTransferOwner = async (req, res) => {
         // Validate Boarding House exists
         const boardingHouse = await BoardingHouse.findByPk(boardingHouseId); // , { transaction: t }
         if (!boardingHouse) {
+            // If a file was uploaded for a non-existent transfer owner, clean it up
+            if (req.imagePath) {
+                deleteFile(req.imagePath, 'transfer owner image');
+            }
             // await t.rollback();
             return res.status(404).json({ message: 'Boarding House not found' });
         }
 
-
         // Create the TransferOwner record
         const newTransferOwner = await TransferOwner.create({
             boardingHouseId: boardingHouse.id,
-            amount: amount,
+            amount: transferAmount,
             transferDate: transDate, // Use validated date
-            proofPath: req.proofPath || null, // Get path from middleware or set null
+            proofPath: req.imagePath || null, // Get path from middleware or set null
             description: description,
             createBy: req.user.username,
             updateBy: req.user.username,
         }); // , { transaction: t }
-
 
         // await t.commit(); // Commit transaction if used
 
@@ -115,18 +129,16 @@ exports.createTransferOwner = async (req, res) => {
         logger.error(`❌ createExpense error: ${error.message}`);
         logger.error(error.stack);
         // Optional: If an error occurred *after* middleware uploaded a file, clean it up.
-        if (req.proofPath) {
+        if (req.imagePath) {
             const fullPath = path.join(__dirname, '..', req.proofPath);
             setTimeout(() => {
-                fs.unlink(fullPath, (err) => {
-                    if (err) logger.error(`❌ Error deleting uploaded proof after transferOwner error: ${fullPath}`, err);
-                    else logger.info(`🗑️ Deleted uploaded proof after transferOwner error: ${fullPath}`);
-                });
+                deleteFile(req.imagePath, 'transfer owner image');
             }, 100); // Small delay
         }
         res.status(500).json({ message: error.message, error: 'Internal Server Error' });
     }
 };
+
 
 // Method to get all expenses (optional filtering by BoardingHouse, date range, category)
 exports.getAllTransferOwners = async (req, res) => {

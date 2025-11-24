@@ -2,6 +2,7 @@
 const express = require('express');
 const router = express.Router();
 const authMiddleware = require("../middleware/authMiddleware");
+const { upload, imageCompressor } = require("../middleware/uploadMiddleware");
 const { getExpenseById, createTransferOwner, getAllTransferOwners } = require('../controllers/transferOwnerController');
 
 // If you are using middleware for proofPath upload, import it here
@@ -11,7 +12,7 @@ const { getExpenseById, createTransferOwner, getAllTransferOwners } = require('.
 // If using middleware for proof upload:
 // router.post('/', upload.single('expenseProof'), imageCompressor, expenseController.createExpense);
 // If not using middleware for upload (path is sent in body):
-router.post('/', authMiddleware, createTransferOwner);
+router.post('/', authMiddleware, upload.single("image"), imageCompressor, createTransferOwner);
 
 // Get all expenses (with filters)
 router.get('/', authMiddleware, getAllTransferOwners);
