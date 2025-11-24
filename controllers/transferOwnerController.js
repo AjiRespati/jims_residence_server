@@ -1,9 +1,10 @@
-// controllers/expenseController.js
+// controllers/transferController.js
 const { TransferOwner, BoardingHouse } = require('../models'); 
 
 const db = require("../models");
-const sequelize = db.sequelize;
-// const Sequelize = db.Sequelize;
+// const sequelize = db.sequelize;
+const Sequelize = db.Sequelize;
+const { Op } = Sequelize;
 
 const logger = require('../config/logger'); // Assuming you have a logger setup
 const fs = require('fs'); // Import file system module if handling proofPath uploads here
@@ -37,7 +38,7 @@ const deleteFile = (filePath, logPrefix = 'File') => {
 };
 
 
-// Method to create a new expense
+// Method to create a new transferOwner
 exports.createTransferOwner = async (req, res) => {
     // No transaction needed for a single create unless linking to other models atomically
     // const t = await sequelize.transaction();
@@ -54,7 +55,7 @@ exports.createTransferOwner = async (req, res) => {
         // Validate required fields
         if (!boardingHouseId ||  amount === undefined || amount === null || !transferDate) {
             // await t.rollback();
-            return res.status(400).json({ message: 'Required expense fields are missing: boardingHouseId, name, amount, expenseDate, paymentMethod' });
+            return res.status(400).json({ message: 'Required transferOwner fields are missing: boardingHouseId, name, amount, transferDate, paymentMethod' });
         }
 
         // Ensure amount is a positive number
@@ -92,7 +93,7 @@ exports.createTransferOwner = async (req, res) => {
 
         // await t.commit(); // Commit transaction if used
 
-        // Fetch the created expense with its BoardingHouse for response
+        // Fetch the created transferOwner with its BoardingHouse for response
         const expenseWithDetails = await TransferOwner.findByPk(newTransferOwner.id, {
             attributes: [
                 'id', 'boardingHouseId', 'amount', 'transferDate',
@@ -106,7 +107,7 @@ exports.createTransferOwner = async (req, res) => {
         res.status(200).json({
             success: true,
             message: 'TransferOwner recorded successfully',
-            data: expenseWithDetails // Return the created expense with details
+            data: expenseWithDetails // Return the created transferOwner with details
         });
 
     } catch (error) {
@@ -118,8 +119,8 @@ exports.createTransferOwner = async (req, res) => {
             const fullPath = path.join(__dirname, '..', req.proofPath);
             setTimeout(() => {
                 fs.unlink(fullPath, (err) => {
-                    if (err) logger.error(`❌ Error deleting uploaded proof after expense error: ${fullPath}`, err);
-                    else logger.info(`🗑️ Deleted uploaded proof after expense error: ${fullPath}`);
+                    if (err) logger.error(`❌ Error deleting uploaded proof after transferOwner error: ${fullPath}`, err);
+                    else logger.info(`🗑️ Deleted uploaded proof after transferOwner error: ${fullPath}`);
                 });
             }, 100); // Small delay
         }
@@ -128,27 +129,20 @@ exports.createTransferOwner = async (req, res) => {
 };
 
 // Method to get all expenses (optional filtering by BoardingHouse, date range, category)
-exports.getAllExpenses = async (req, res) => {
+exports.getAllTransferOwners = async (req, res) => {
     try {
         // Extract filter parameters from query string
-        const { boardingHouseId, dateFrom, dateTo, category } = req.query;
+        const { boardingHouseId, dateFrom, dateTo } = req.query;
 
         // Prepare the where clause for the main TransferOwner query
-        const expenseWhere = {};
+        const transferOwnerWhere = {};
         let isFilterApplied = false;
 
         // Filter by BoardingHouse
         if (boardingHouseId) {
-            expenseWhere.boardingHouseId = boardingHouseId;
+            transferOwnerWhere.boardingHouseId = boardingHouseId;
             isFilterApplied = true;
         }
-
-        // Filter by Category
-        if (category) {
-            expenseWhere.category = category;
-            isFilterApplied = true;
-        }
-
 
         // Add date filter if dateFrom and dateTo are provided and valid
         if (dateFrom && dateTo) {
@@ -159,7 +153,7 @@ exports.getAllExpenses = async (req, res) => {
                 // Adjust toDate to include the entire end day
                 toDate.setHours(23, 59, 59, 999);
 
-                expenseWhere.expenseDate = { // Filtering by TransferOwner's expenseDate
+                transferOwnerWhere.transferDate = { // Filtering by TransferOwner's expenseDate
                     [Op.between]: [fromDate, toDate]
                 };
                 isFilterApplied = true;
@@ -175,7 +169,7 @@ exports.getAllExpenses = async (req, res) => {
             // Handle only dateFrom provided
             const fromDate = new Date(dateFrom);
             if (!isNaN(fromDate.getTime())) {
-                expenseWhere.expenseDate = { // Filtering by TransferOwner's expenseDate
+                transferOwnerWhere.transferDate = { // Filtering by TransferOwner's expenseDate
                     [Op.gte]: fromDate
                 };
                 isFilterApplied = true;
@@ -191,7 +185,7 @@ exports.getAllExpenses = async (req, res) => {
             const toDate = new Date(dateTo);
             if (!isNaN(toDate.getTime())) {
                 toDate.setHours(23, 59, 59, 999); // Include the entire end day
-                expenseWhere.expenseDate = { // Filtering by TransferOwner's expenseDate
+                transferOwnerWhere.transferDate = { // Filtering by TransferOwner's expenseDate
                     [Op.lte]: toDate
                 };
                 isFilterApplied = true;
@@ -206,16 +200,16 @@ exports.getAllExpenses = async (req, res) => {
 
 
         // Find all expenses with associated BoardingHouse
-        const expenses = await TransferOwner.findAll({
-            where: expenseWhere, // Apply the filters
+        const transferOwners = await TransferOwner.findAll({
+            where: transferOwnerWhere, // Apply the filters
             attributes: [
-                'id', 'boardingHouseId', 'category', 'name', 'amount', 'expenseDate',
-                'paymentMethod', 'proofPath', 'description', 'createBy', 'updateBy', 'createdAt', 'updatedAt'
+                'id', 'boardingHouseId', 'amount', 'transferDate',
+                'proofPath', 'description', 'createBy', 'updateBy', 'createdAt', 'updatedAt'
             ],
             include: [
                 { model: BoardingHouse, attributes: ['id', 'name', 'address'] }
             ],
-            order: [['expenseDate', 'DESC']], // Default order
+            order: [['transferDate', 'DESC']], // Default order
         });
 
         let message = 'Expenses retrieved successfully';
@@ -224,11 +218,10 @@ exports.getAllExpenses = async (req, res) => {
             // You could make the message more specific based on which filters were used
         }
 
-
         res.status(200).json({
             success: true,
             message: message,
-            data: expenses
+            data: transferOwners
         });
 
     } catch (error) {
@@ -238,10 +231,10 @@ exports.getAllExpenses = async (req, res) => {
     }
 };
 
-// Method to get a single expense by its ID
+// Method to get a single transferOwner by its ID
 exports.getExpenseById = async (req, res) => {
     try {
-        const { id } = req.params; // Extract the expense ID
+        const { id } = req.params; // Extract the transferOwner ID
 
         if (!id) {
             return res.status(400).json({
@@ -251,17 +244,17 @@ exports.getExpenseById = async (req, res) => {
             });
         }
 
-        const expense = await TransferOwner.findByPk(id, {
+        const transferOwner = await TransferOwner.findByPk(id, {
             attributes: [
-                'id', 'boardingHouseId', 'category', 'name', 'amount', 'expenseDate',
-                'paymentMethod', 'proofPath', 'description', 'createBy', 'updateBy', 'createdAt', 'updatedAt'
+                'id', 'boardingHouseId', 'amount', 'transferDate',
+                'proofPath', 'description', 'createBy', 'updateBy', 'createdAt', 'updatedAt'
             ],
             include: [
                 { model: BoardingHouse, attributes: ['id', 'name', 'address'] }
             ]
         });
 
-        if (!expense) {
+        if (!transferOwner) {
             return res.status(404).json({
                 success: false,
                 message: 'TransferOwner not found',
@@ -272,7 +265,7 @@ exports.getExpenseById = async (req, res) => {
         res.status(200).json({
             success: true,
             message: 'TransferOwner retrieved successfully with associated boarding house details',
-            data: expense
+            data: transferOwner
         });
 
     } catch (error) {

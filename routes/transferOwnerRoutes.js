@@ -2,7 +2,7 @@
 const express = require('express');
 const router = express.Router();
 const authMiddleware = require("../middleware/authMiddleware");
-const { getAllExpenses, getExpenseById, createTransferOwner } = require('../controllers/transferOwnerController');
+const { getExpenseById, createTransferOwner, getAllTransferOwners } = require('../controllers/transferOwnerController');
 
 // If you are using middleware for proofPath upload, import it here
 // const { upload, imageCompressor } = require('../middleware/uploadMiddleware'); // Example
@@ -14,7 +14,7 @@ const { getAllExpenses, getExpenseById, createTransferOwner } = require('../cont
 router.post('/', authMiddleware, createTransferOwner);
 
 // Get all expenses (with filters)
-router.get('/', authMiddleware, getAllExpenses);
+router.get('/', authMiddleware, getAllTransferOwners);
 
 // Get a single expense by ID
 router.get('/:id', authMiddleware, getExpenseById);
