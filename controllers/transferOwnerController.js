@@ -229,11 +229,18 @@ exports.getAllTransferOwners = async (req, res) => {
             message = 'Expenses retrieved successfully with filters applied';
             // You could make the message more specific based on which filters were used
         }
+        
+        const totalAmount = transferOwners.reduce((sum, transferOwners) => sum + (parseFloat(transferOwners.amount) || 0), 0);
+
+        const responseData = {
+            transferOwners,
+            totalAmount: parseFloat(totalAmount.toFixed(2)),
+        }
 
         res.status(200).json({
             success: true,
             message: message,
-            data: transferOwners
+            data: responseData
         });
 
     } catch (error) {
