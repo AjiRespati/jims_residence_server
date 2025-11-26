@@ -4,10 +4,10 @@ const Sequelize = db.Sequelize;
 const { Op } = Sequelize;
 const logger = require('../config/logger');
 
-const { Invoice, Expense, BoardingHouse, Tenant, Room, Charge, Transaction
+const { Invoice, Expense, BoardingHouse, Tenant, Room, Charge, Transaction, TransferOwner
 } = require('../models');
 
-const { isValid, parseISO, setHours, setMinutes, setSeconds, setMilliseconds, format } = require('date-fns'); // Import date-fns utilities
+const { isValid, parseISO, setHours, format } = require('date-fns'); // Import date-fns utilities
 
 
 
@@ -56,7 +56,7 @@ exports.getMonthlyFinancialReport = async (req, res) => {
             boardingHouseConditions.id = boardingHouseId;
             isBoardingHouseFilterApplied = true;
         }
-        
+
         // --- Fetch Filtered Invoices (filtered by Transaction.transactionDate) ---
         // Invoice where clause will now only filter by status, not date
         const invoiceStatusWhere = {
@@ -129,11 +129,31 @@ exports.getMonthlyFinancialReport = async (req, res) => {
                 return res.status(404).json({ success: false, message: `Boarding House with ID ${boardingHouseId} not found.`, data: null });
             }
 
+            // Add totalAmountTransferOwner with associated BoardingHouse to response
+            const transferOwnerWhere = {};
+            transferOwnerWhere.boardingHouseId = boardingHouseId;
+            transferOwnerWhere.transferDate = { // Filtering by TransferOwner's expenseDate
+                [Op.between]: [startDate, endDate]
+            };
+
+            // Find all transfer owner with associated BoardingHouse
+            const transferOwners = await TransferOwner.findAll({
+                where: transferOwnerWhere, // Apply the filters
+                attributes: ['id', 'boardingHouseId', 'amount'],
+                include: [
+                    { model: BoardingHouse, attributes: ['id', 'name', 'address'], required: isBoardingHouseFilterApplied }
+                ],
+                order: [['transferDate', 'DESC']], // Default order
+            });
+
+            const totalAmountTransferOwner = transferOwners.reduce((sum, transferOwners) => sum + (parseFloat(transferOwners.amount) || 0), 0);
+
             reportDataList.push({
                 boardingHouseId: boardingHouse.id,
                 boardingHouseName: boardingHouse.name,
                 month: monthInt,
                 year: yearInt,
+                totalTransferOwner: totalAmountTransferOwner,
                 totalMonthlyIncome: parseFloat(totalMonthlyIncome),
                 totalMonthlyExpenses: parseFloat(totalMonthlyExpenses),
                 netProfitLoss: parseFloat(totalMonthlyIncome) - parseFloat(totalMonthlyExpenses)
@@ -187,6 +207,7 @@ exports.getMonthlyFinancialReport = async (req, res) => {
                     boardingHouseName: bhName,
                     month: monthInt,
                     year: yearInt,
+                    totalTransferOwner: 0,
                     totalMonthlyIncome: totalMonthlyIncome,
                     totalMonthlyExpenses: totalMonthlyExpenses,
                     netProfitLoss: totalMonthlyIncome - totalMonthlyExpenses
@@ -205,6 +226,7 @@ exports.getMonthlyFinancialReport = async (req, res) => {
                         boardingHouseName: bh.name,
                         month: monthInt,
                         year: yearInt,
+                        totalTransferOwner: 0,
                         totalMonthlyIncome: 0,
                         totalMonthlyExpenses: totalMonthlyExpenses,
                         netProfitLoss: -totalMonthlyExpenses
@@ -417,7 +439,7 @@ exports.getFinancialOverview = async (req, res) => {
     } catch (error) {
         logger.error(`❌ getFinancialOverview error: ${error.message}`);
         logger.error(error.stack);
-        res.status(500).json({ success: false,  message: error.message, error: 'Internal Server Error' });
+        res.status(500).json({ success: false, message: error.message, error: 'Internal Server Error' });
     }
 };
 
@@ -615,6 +637,6 @@ exports.getFinancialTransactions = async (req, res) => {
     } catch (error) {
         logger.error(`❌ Error fetching financial transactions: ${error.message}`);
         logger.error(error.stack);
-        res.status(500).json({ success: false, message: error.message, error: 'Internal Server Error'  });
+        res.status(500).json({ success: false, message: error.message, error: 'Internal Server Error' });
     }
 };

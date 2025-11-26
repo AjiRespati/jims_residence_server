@@ -90,5 +90,21 @@ WHERE id = 'b9f0e8f6-3b8b-4dcb-bfde-3fb4a02db852';
 
 
 
+------------------------------------
+-- DELETE ROOMS                   --
+------------------------------------
 
+DELETE FROM "public"."Rooms"
+WHERE "id" = 'b8673338-1c63-473a-acf9-d8f31cdc6bc9';
 
+DELETE FROM "public"."Rooms"
+WHERE "id" = 'ca9def50-c484-4a7d-8a8a-56892a0f7a8b';
+
+DELETE FROM "public"."Rooms"
+WHERE "id" = 'cab0c900-8de7-48bb-a380-4c64ecdf6d76';
+
+DELETE FROM "public"."Rooms"
+WHERE "id" = 'bdd5ea98-d12a-4abf-b763-6f215c21f289';
+
+DELETE FROM "public"."Rooms"
+WHERE "id" = '07d1ba04-4679-4172-aea0-45a2e4aa49d4';
