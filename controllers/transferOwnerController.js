@@ -168,7 +168,6 @@ exports.getAllTransferOwners = async (req, res) => {
                 transferOwnerWhere.transferDate = { // Filtering by TransferOwner's expenseDate
                     [Op.between]: [fromDate, toDate]
                 };
-                isFilterApplied = true;
             } else {
                 // Handle invalid date formats
                 return res.status(400).json({
@@ -184,7 +183,6 @@ exports.getAllTransferOwners = async (req, res) => {
                 transferOwnerWhere.transferDate = { // Filtering by TransferOwner's expenseDate
                     [Op.gte]: fromDate
                 };
-                isFilterApplied = true;
             } else {
                 return res.status(400).json({
                     success: false,
@@ -200,7 +198,6 @@ exports.getAllTransferOwners = async (req, res) => {
                 transferOwnerWhere.transferDate = { // Filtering by TransferOwner's expenseDate
                     [Op.lte]: toDate
                 };
-                isFilterApplied = true;
             } else {
                 return res.status(400).json({
                     success: false,
@@ -211,7 +208,7 @@ exports.getAllTransferOwners = async (req, res) => {
         }
 
 
-        // Find all expenses with associated BoardingHouse
+        // Find all transferowner with associated BoardingHouse
         const transferOwners = await TransferOwner.findAll({
             where: transferOwnerWhere, // Apply the filters
             attributes: [
@@ -219,14 +216,14 @@ exports.getAllTransferOwners = async (req, res) => {
                 'proofPath', 'description', 'createBy', 'updateBy', 'createdAt', 'updatedAt'
             ],
             include: [
-                { model: BoardingHouse, attributes: ['id', 'name', 'address'] }
+                { model: BoardingHouse, attributes: ['id', 'name', 'address'], required: isFilterApplied  }
             ],
             order: [['transferDate', 'DESC']], // Default order
         });
 
-        let message = 'Expenses retrieved successfully';
+        let message = 'Transfer owner retrieved successfully';
         if (isFilterApplied) {
-            message = 'Expenses retrieved successfully with filters applied';
+            message = 'Transfer owners retrieved successfully with filters applied';
             // You could make the message more specific based on which filters were used
         }
         
