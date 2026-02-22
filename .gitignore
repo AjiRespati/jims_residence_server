@@ -90,4 +90,5 @@ lerna-debug.log
 .DS_Store
 Thumbs.db
 
-uploads
+# Ignore uploads folder
+uploads/
