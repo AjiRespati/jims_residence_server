@@ -9,7 +9,10 @@ module.exports = (sequelize, DataTypes) => {
         description: { type: DataTypes.TEXT }, // Optional detailed description
         createBy: { type: DataTypes.STRING },
         updateBy: { type: DataTypes.STRING },
-    }, { timestamps: true });
+    }, {
+        timestamps: true,
+        paranoid: true
+    });
 
     TransferOwner.associate = (models) => {
         // An TransferOwner belongs to one BoardingHouse
