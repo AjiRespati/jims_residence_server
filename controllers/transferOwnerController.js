@@ -1,5 +1,5 @@
 // controllers/transferController.js
-const { TransferOwner, BoardingHouse } = require('../models'); 
+const { TransferOwner, BoardingHouse } = require('../models');
 
 const db = require("../models");
 // const sequelize = db.sequelize;
@@ -52,7 +52,7 @@ exports.createTransferOwner = async (req, res) => {
         } = req.body;
 
         // Validate required fields
-        if (!boardingHouseId ||  amount === undefined || amount === null || !transferDate) {
+        if (!boardingHouseId || amount === undefined || amount === null || !transferDate) {
             // If a file was uploaded for a non-existent transfer owner, clean it up
             if (req.imagePath) {
                 deleteFile(req.imagePath, 'transfer owner image');
@@ -216,7 +216,7 @@ exports.getAllTransferOwners = async (req, res) => {
                 'proofPath', 'description', 'createBy', 'updateBy', 'createdAt', 'updatedAt'
             ],
             include: [
-                { model: BoardingHouse, attributes: ['id', 'name', 'address'], required: isFilterApplied  }
+                { model: BoardingHouse, attributes: ['id', 'name', 'address'], required: isFilterApplied }
             ],
             order: [['transferDate', 'DESC']], // Default order
         });
@@ -226,7 +226,7 @@ exports.getAllTransferOwners = async (req, res) => {
             message = 'Transfer owners retrieved successfully with filters applied';
             // You could make the message more specific based on which filters were used
         }
-        
+
         const totalAmount = transferOwners.reduce((sum, transferOwners) => sum + (parseFloat(transferOwners.amount) || 0), 0);
 
         const responseData = {
@@ -248,7 +248,7 @@ exports.getAllTransferOwners = async (req, res) => {
 };
 
 // Method to get a single transferOwner by its ID
-exports.getExpenseById = async (req, res) => {
+exports.getTransferOwnerById = async (req, res) => {
     try {
         const { id } = req.params; // Extract the transferOwner ID
 
@@ -291,4 +291,47 @@ exports.getExpenseById = async (req, res) => {
     }
 };
 
-// You might add updateExpense and deleteExpense methods later
+// Method to soft delete a transferOwner by ID
+exports.deleteTransferOwner = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        if (!id) {
+            return res.status(400).json({
+                success: false,
+                message: 'TransferOwner ID is required',
+                data: null
+            });
+        }
+
+        const transferOwner = await TransferOwner.findByPk(id);
+
+        if (!transferOwner) {
+            return res.status(404).json({
+                success: false,
+                message: 'TransferOwner not found',
+                data: null
+            });
+        }
+
+        // Soft delete (sets deletedAt)
+        await transferOwner.destroy();
+
+        res.status(200).json({
+            success: true,
+            message: 'TransferOwner deleted successfully (soft delete)',
+            data: null
+        });
+
+    } catch (error) {
+        logger.error(`❌ deleteTransferOwner error: ${error.message}`);
+        logger.error(error.stack);
+
+        res.status(500).json({
+            success: false,
+            message: error.message,
+            error: 'Internal Server Error'
+        });
+    }
+};
+

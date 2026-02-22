@@ -3,7 +3,7 @@ const express = require('express');
 const router = express.Router();
 const authMiddleware = require("../middleware/authMiddleware");
 const { upload, imageCompressor } = require("../middleware/uploadMiddleware");
-const { getExpenseById, createTransferOwner, getAllTransferOwners } = require('../controllers/transferOwnerController');
+const { createTransferOwner, getAllTransferOwners, deleteTransferOwner, getTransferOwnerById } = require('../controllers/transferOwnerController');
 
 // If you are using middleware for proofPath upload, import it here
 // const { upload, imageCompressor } = require('../middleware/uploadMiddleware'); // Example
@@ -18,8 +18,9 @@ router.post('/', authMiddleware, upload.single("image"), imageCompressor, create
 router.get('/', authMiddleware, getAllTransferOwners);
 
 // Get a single expense by ID
-router.get('/:id', authMiddleware, getExpenseById);
+router.get('/:id', authMiddleware, getTransferOwnerById);
 
 // You might add PUT/DELETE routes later if needed
+router.delete('/:id', authMiddleware, deleteTransferOwner);
 
 module.exports = router;
