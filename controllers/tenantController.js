@@ -128,7 +128,8 @@ exports.getAllTenants = async (req, res) => {
                 'id', 'name', 'phone', 'NIKNumber', 'tenancyStatus',
                 'checkinDate', // <-- IMPORTANT: Now includes the dedicated checkinDate
                 'startDate', 'endDate', 'dueDate', 'banishDate', 'checkoutDate',
-                'createBy', 'updateBy', 'NIKImagePath', 'isNIKCopyDone'
+                'createBy', 'updateBy', 'NIKImagePath', 'isNIKCopyDone',
+                'contractImagePath', 'isContractSigned'
             ],
             include: [
                 roomIncludeConfig,
@@ -220,6 +221,8 @@ exports.getTenantById = async (req, res) => {
                 'NIKNumber',
                 'NIKImagePath',
                 'isNIKCopyDone',
+                'contractImagePath',
+                'isContractSigned',
                 'tenancyStatus',
                 'startDate',
                 'dueDate', // This might now be the tenant's contract end date, distinct from invoice due dates
@@ -350,7 +353,7 @@ exports.createTenant = async (req, res) => {
             // startDate will now represent the check-in date
             startDate: checkinDateRaw, // Rename incoming startDate to checkinDateRaw
             dueDate, banishDate,
-            NIKImagePath, isNIKCopyDone, tenancyStatus,
+            NIKImagePath, isNIKCopyDone,             tenancyStatus,
             priceAmount, priceName, priceDescription, priceRoomSize,
             additionalPrices, otherCosts
         } = req.body;
@@ -635,6 +638,7 @@ exports.updateTenant = async (req, res) => {
             'phone',
             'NIKNumber',
             'isNIKCopyDone',
+            'isContractSigned',
             'tenancyStatus',
             'checkinDate',
             'startDate',
@@ -658,6 +662,15 @@ exports.updateTenant = async (req, res) => {
             }
             tenantUpdateData.NIKImagePath = req.imagePath; // Set the new image path
             tenantUpdateData.isNIKCopyDone = true; // set copy done true
+        }
+
+        // Add the contractImagePath if a signed contract file was uploaded
+        if (req.contractImagePath) {
+            if (tenant.contractImagePath) {
+                deleteFile(tenant.contractImagePath, 'Old contract image');
+            }
+            tenantUpdateData.contractImagePath = req.contractImagePath;
+            tenantUpdateData.isContractSigned = true;
         }
 
         // 3. Optional Validation for Foreign Keys if present in update data
@@ -706,6 +719,7 @@ exports.updateTenant = async (req, res) => {
         const tenantWithDetails = await Tenant.findByPk(updatedTenant.id, {
             attributes: [ // Select specific attributes for the Tenant
                 'id', 'name', 'phone', 'NIKNumber', 'NIKImagePath', 'isNIKCopyDone',
+                'contractImagePath', 'isContractSigned',
                 'tenancyStatus', 'startDate', 'dueDate', 'banishDate', 'createBy', 'updateBy'
             ],
             include: tenantDetailsInclude
@@ -738,6 +752,11 @@ exports.deleteTenant = async (req, res) => {
     try {
         const data = await Tenant.findByPk(req.params.id);
         if (!data) return res.status(404).json({ error: 'tenant not found' });
+
+        // Delete associated uploaded files (KTP image + signed contract)
+        const { deleteUploadedFile } = require('../middleware/uploadMiddleware');
+        deleteUploadedFile(data.NIKImagePath, 'Tenant NIK image');
+        deleteUploadedFile(data.contractImagePath, 'Tenant contract PDF');
 
         await data.destroy();
         res.json({ message: 'tenant deleted successfully' });

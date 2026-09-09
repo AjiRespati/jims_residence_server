@@ -3,7 +3,7 @@ const sequelize = db.sequelize;
 // const Sequelize = db.Sequelize;
 // const { Op } = Sequelize;
 
-const { BoardingHouse, Room } = require('../models');
+const { BoardingHouse, Room, Price, Expense, TransferOwner, Tenant, Invoice, Charge, Transaction, RoomHistory, AdditionalPrice, OtherCost } = require('../models');
 const logger = require('../config/logger');
 
 exports.getAllBoardingHouses = async (req, res) => {
@@ -103,8 +103,59 @@ exports.deleteBoardingHouse = async (req, res) => {
         const data = await BoardingHouse.findByPk(req.params.id);
         if (!data) return res.status(404).json({ error: 'BoardingHouse not found' });
 
-        await data.destroy();
-        res.json({ message: 'BoardingHouse deleted successfully' });
+        const boardingHouseId = req.params.id;
+
+        await sequelize.transaction(async (t) => {
+            // All rooms of this boarding house
+            const rooms = await Room.findAll({
+                where: { boardingHouseId },
+                attributes: ['id'],
+                transaction: t
+            });
+            const roomIds = rooms.map(r => r.id);
+
+            if (roomIds.length > 0) {
+                // Transactions linked to invoices of these rooms
+                const invoices = await Invoice.findAll({
+                    where: { roomId: roomIds },
+                    attributes: ['id'],
+                    transaction: t
+                });
+                const invoiceIds = invoices.map(i => i.id);
+
+                if (invoiceIds.length > 0) {
+                    await Transaction.destroy({ where: { invoiceId: invoiceIds }, transaction: t });
+                    await Charge.destroy({ where: { invoiceId: invoiceIds }, transaction: t });
+                    await OtherCost.destroy({ where: { invoiceId: invoiceIds }, transaction: t });
+                }
+
+                // Delete uploaded files of tenants in these rooms (KTP + contract) before they're gone
+                const { deleteUploadedFile } = require('../middleware/uploadMiddleware');
+                const bhTenants = await Tenant.findAll({
+                    where: { roomId: roomIds },
+                    attributes: ['NIKImagePath', 'contractImagePath'],
+                    transaction: t
+                });
+                bhTenants.forEach(tn => {
+                    deleteUploadedFile(tn.NIKImagePath, 'Tenant NIK image');
+                    deleteUploadedFile(tn.contractImagePath, 'Tenant contract PDF');
+                });
+
+                await Invoice.destroy({ where: { roomId: roomIds }, transaction: t });
+                await Tenant.destroy({ where: { roomId: roomIds }, transaction: t });
+                await RoomHistory.destroy({ where: { roomId: roomIds }, transaction: t });
+                await AdditionalPrice.destroy({ where: { roomId: roomIds }, transaction: t });
+                await OtherCost.destroy({ where: { roomId: roomIds }, transaction: t });
+            }
+
+            await Price.destroy({ where: { boardingHouseId }, transaction: t });
+            await Expense.destroy({ where: { boardingHouseId }, transaction: t });
+            await TransferOwner.destroy({ where: { boardingHouseId }, transaction: t });
+
+            await data.destroy({ transaction: t });
+        });
+
+        res.json({ message: 'BoardingHouse and all related data deleted successfully' });
     } catch (error) {
         logger.error(`❌ deleteBoardingHouse error: ${error.message}`);
         logger.error(error.stack);

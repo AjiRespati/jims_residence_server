@@ -7,6 +7,8 @@ module.exports = (sequelize, DataTypes) => {
         NIKNumber: { type: DataTypes.STRING, allowNull: false, unique: true },
         NIKImagePath: { type: DataTypes.STRING, allowNull: true },
         isNIKCopyDone: { type: DataTypes.BOOLEAN, defaultValue: false, allowNull: false },
+        contractImagePath: { type: DataTypes.STRING, allowNull: true },
+        isContractSigned: { type: DataTypes.BOOLEAN, defaultValue: false, allowNull: false },
         tenancyStatus: { type: DataTypes.ENUM('Waiting','Active', 'Inactive'), allowNull: false, defaultValue: 'Active' },
         startDate: { type: DataTypes.DATE },
         dueDate: { type: DataTypes.DATE },

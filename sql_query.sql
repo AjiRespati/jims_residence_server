@@ -108,3 +108,27 @@ WHERE "id" = 'bdd5ea98-d12a-4abf-b763-6f215c21f289';
 
 DELETE FROM "public"."Rooms"
 WHERE "id" = '07d1ba04-4679-4172-aea0-45a2e4aa49d4';
+
+
+-------------------------------------
+-- REMOVE ADDED TENANT / ROOM FIELDS --
+-------------------------------------
+
+ALTER TABLE "public"."Tenants"
+    DROP COLUMN IF EXISTS "birthPlace",
+    DROP COLUMN IF EXISTS "birthDate",
+    DROP COLUMN IF EXISTS "homeAddress",
+    DROP COLUMN IF EXISTS "emergencyContactName",
+    DROP COLUMN IF EXISTS "emergencyContactRelation",
+    DROP COLUMN IF EXISTS "emergencyContactPhone";
+
+ALTER TABLE "public"."Rooms"
+    DROP COLUMN IF EXISTS "facilities";
+
+-------------------------------------
+-- ADD SIGNED CONTRACT UPLOAD FIELDS --
+-------------------------------------
+
+ALTER TABLE "public"."Tenants"
+    ADD COLUMN IF NOT EXISTS "contractImagePath" VARCHAR(255),
+    ADD COLUMN IF NOT EXISTS "isContractSigned" BOOLEAN NOT NULL DEFAULT FALSE;

@@ -3,7 +3,7 @@ const sequelize = db.sequelize;
 const Sequelize = db.Sequelize;
 const { Op } = Sequelize;
 
-const { BoardingHouse, Price, Room, Tenant, Payment, AdditionalPrice, OtherCost } = require('../models');
+const { BoardingHouse, Price, Room, Tenant, Payment, AdditionalPrice, OtherCost, Invoice, Charge, Transaction, RoomHistory } = require('../models');
 const logger = require('../config/logger');
 
 exports.getAllRooms = async (req, res) => {
@@ -530,8 +530,45 @@ exports.deleteRoom = async (req, res) => {
         const data = await Room.findByPk(req.params.id);
         if (!data) return res.status(404).json({ error: 'room not found' });
 
-        await data.destroy();
-        res.json({ message: 'room deleted successfully' });
+        const roomId = req.params.id;
+
+        await sequelize.transaction(async (t) => {
+            // Invoices of this room -> their Transactions, Charges, OtherCosts
+            const invoices = await Invoice.findAll({
+                where: { roomId },
+                attributes: ['id'],
+                transaction: t
+            });
+            const invoiceIds = invoices.map(i => i.id);
+
+            if (invoiceIds.length > 0) {
+                await Transaction.destroy({ where: { invoiceId: invoiceIds }, transaction: t });
+                await Charge.destroy({ where: { invoiceId: invoiceIds }, transaction: t });
+                await OtherCost.destroy({ where: { invoiceId: invoiceIds }, transaction: t });
+            }
+
+            // Delete uploaded files of tenants in this room (KTP + contract) before they're gone
+            const { deleteUploadedFile } = require('../middleware/uploadMiddleware');
+            const roomTenants = await Tenant.findAll({
+                where: { roomId },
+                attributes: ['NIKImagePath', 'contractImagePath'],
+                transaction: t
+            });
+            roomTenants.forEach(tn => {
+                deleteUploadedFile(tn.NIKImagePath, 'Tenant NIK image');
+                deleteUploadedFile(tn.contractImagePath, 'Tenant contract PDF');
+            });
+
+            await Invoice.destroy({ where: { roomId }, transaction: t });
+            await Tenant.destroy({ where: { roomId }, transaction: t });
+            await RoomHistory.destroy({ where: { roomId }, transaction: t });
+            await AdditionalPrice.destroy({ where: { roomId }, transaction: t });
+            await OtherCost.destroy({ where: { roomId }, transaction: t });
+
+            await data.destroy({ transaction: t });
+        });
+
+        res.json({ message: 'Room and all related data deleted successfully' });
     } catch (error) {
         logger.error(`❌ deleteRoom error: ${error.message}`);
         logger.error(error.stack);

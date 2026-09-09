@@ -17,7 +17,7 @@ router.get('/', authMiddleware, getAllTenants);
 router.get('/search', authMiddleware, searchTenants);
 router.get('/:id', authMiddleware, getTenantById);
 router.post('/', authMiddleware, createTenant);
-router.put("/:id", authMiddleware, upload.single("image"), imageCompressor, updateTenant);
+router.put("/:id", authMiddleware, upload.fields([{ name: "image", maxCount: 1 }, { name: "contractImage", maxCount: 1 }]), imageCompressor, updateTenant);
 router.delete('/:id', authMiddleware, deleteTenant);
 router.post('/:id/checkout', authMiddleware, tenantCheckout);
 
