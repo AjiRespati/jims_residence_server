@@ -3,6 +3,15 @@ const sharp = require("sharp");
 const path = require("path");
 const fs = require("fs");
 
+const uploadsDirectory = path.join(__dirname, "../uploads");
+
+const ensureUploadsDirectory = () => {
+    fs.mkdirSync(uploadsDirectory, { recursive: true });
+};
+
+const uploadFilename = (file) =>
+    `${Date.now()}-${path.basename(file.originalname).replace(/\s+/g, "-")}`;
+
 // ✅ Configure multer to store image in memory buffer (instead of disk)
 const storage = multer.memoryStorage();
 
@@ -27,8 +36,9 @@ const imageCompressor = async (req, res, next) => {
     if (!req.file && !fieldFiles?.length) return next(); // Skip if no file uploaded
 
     const compress = async (file) => {
-        const filename = `${Date.now()}-${file.originalname.replace(/\s+/g, '-')}`;
-        const outputPath = path.join(__dirname, '../uploads', filename);
+        ensureUploadsDirectory();
+        const filename = uploadFilename(file);
+        const outputPath = path.join(uploadsDirectory, filename);
 
         await sharp(file.buffer)
             .resize({ width: 800 }) // Resize to 800px width
@@ -40,9 +50,9 @@ const imageCompressor = async (req, res, next) => {
 
     // ✅ Save file as-is (no compression) — used for PDFs
     const saveRaw = (file) => {
-        const ext = path.extname(file.originalname) || '';
-        const filename = `${Date.now()}-${file.originalname.replace(/\s+/g, '-')}${ext}`;
-        const outputPath = path.join(__dirname, '../uploads', filename);
+        ensureUploadsDirectory();
+        const filename = uploadFilename(file);
+        const outputPath = path.join(uploadsDirectory, filename);
         fs.writeFileSync(outputPath, file.buffer);
         return `/uploads/${filename}`;
     };
@@ -75,7 +85,7 @@ module.exports = { upload, imageCompressor };
 // ✅ Delete an uploaded file from the uploads folder (safe no-op if missing)
 const deleteUploadedFile = (filePath, logPrefix = 'File') => {
     if (!filePath) return;
-    const fullPath = path.join(__dirname, '../uploads', path.basename(filePath));
+    const fullPath = path.join(uploadsDirectory, path.basename(filePath));
     fs.unlink(fullPath, (err) => {
         if (err) {
             if (err.code !== 'ENOENT') {
