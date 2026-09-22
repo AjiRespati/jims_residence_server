@@ -918,6 +918,26 @@ exports.tenantCheckout = async (req, res) => {
     }
 };
 
+exports.uploadGeneratedContract = async (req, res) => {
+    try {
+        if (!req.imagePath) {
+            return res.status(400).json({ success: false, message: 'No contract file uploaded.', data: null });
+        }
+        res.status(200).json({
+            success: true,
+            message: 'Contract uploaded successfully',
+            data: { path: req.imagePath }
+        });
+    } catch (error) {
+        logger.error(`❌ uploadGeneratedContract error: ${error.message}`);
+        logger.error(error.stack);
+        if (req.imagePath) {
+            deleteFile(req.imagePath, 'Uploaded contract PDF');
+        }
+        res.status(500).json({ message: error.message, error: 'Internal Server Error' });
+    }
+};
+
 exports.searchTenants = async (req, res) => {
     try {
         const { query } = req.query; // Get the search query from the URL (e.g., /api/tenants/search?query=john)
