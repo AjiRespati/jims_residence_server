@@ -51,7 +51,13 @@ const imageCompressor = async (req, res, next) => {
     // ✅ Save file as-is (no compression) — used for PDFs
     const saveRaw = (file) => {
         ensureUploadsDirectory();
-        const filename = uploadFilename(file);
+        // Generated contract PDFs (field 'file') keep the exact uploaded
+        // filename (matching the app's download name); other uploads get a
+        // timestamp prefix to avoid collisions.
+        const filename =
+            file.fieldname === "file"
+                ? path.basename(file.originalname)
+                : uploadFilename(file);
         const outputPath = path.join(uploadsDirectory, filename);
         fs.writeFileSync(outputPath, file.buffer);
         return `/uploads/${filename}`;
