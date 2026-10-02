@@ -6,6 +6,7 @@ const { Tenant, Transaction, Invoice, Charge, Room, BoardingHouse } = require('.
 const logger = require('../config/logger');
 const path = require("path");
 const fs = require("fs");
+const { isAdmin, boardingHouseScopeWhere } = require('../utils/scope');
 
 
 // Method to record a new payment transaction
@@ -144,6 +145,9 @@ exports.recordPayment = async (req, res) => {
 exports.getAllTransactions = async (req, res) => {
     try {
         // Optional: Implement filtering, pagination, sorting
+        const isScoped = !isAdmin(req);
+        const boardingHouseScope = boardingHouseScopeWhere(req);
+
         const transactions = await Transaction.findAll({
             attributes: ['id', 'invoiceId', 'amount', 'transactionDate', 'method', 'description', 'createBy', 'createdAt'],
             include: [
@@ -155,7 +159,12 @@ exports.getAllTransactions = async (req, res) => {
                         {
                             model: Room,
                             attributes: ['id', 'roomNumber'],
-                            include: [{ model: BoardingHouse, attributes: ['id', 'name'] }]
+                            include: [{
+                                model: BoardingHouse,
+                                attributes: ['id', 'name'],
+                                where: isScoped ? boardingHouseScope : undefined,
+                                required: isScoped
+                            }]
                         }
                     ]
                 }

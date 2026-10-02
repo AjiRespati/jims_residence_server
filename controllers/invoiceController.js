@@ -7,6 +7,7 @@ const { Invoice, Charge, Transaction, Tenant, Room, BoardingHouse } = require('.
 const logger = require('../config/logger');
 const path = require("path");
 const fs = require("fs");
+const { isAdmin, canAccessBoardingHouse, boardingHouseScopeWhere } = require('../utils/scope');
 
 // Helper function to delete a file safely (copied from updateTenant for completeness)
 const deleteFile = (filePath, logPrefix = 'File') => {
@@ -225,7 +226,13 @@ exports.getAllInvoices = async (req, res) => {
         let isBoardingHouseFilterApplied = false;
 
         if (boardingHouseId) {
+            if (!canAccessBoardingHouse(req, boardingHouseId)) {
+                return res.status(200).json({ success: true, message: 'Invoices retrieved successfully', data: [] });
+            }
             boardingHouseWhere.id = boardingHouseId;
+            isBoardingHouseFilterApplied = true;
+        } else if (!isAdmin(req)) {
+            Object.assign(boardingHouseWhere, boardingHouseScopeWhere(req));
             isBoardingHouseFilterApplied = true;
         }
 

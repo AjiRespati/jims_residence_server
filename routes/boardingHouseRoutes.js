@@ -10,8 +10,8 @@ const {
     deleteBoardingHouse
 } = require('../controllers/boardingHouseController');
 
-router.get('/', getAllBoardingHouses);
-router.get('/:id', getBoardingHouseById);
+router.get('/', authMiddleware, getAllBoardingHouses);
+router.get('/:id', authMiddleware, getBoardingHouseById);
 router.post('/', authMiddleware, createBoardingHouse);
 router.put('/:id', authMiddleware, updateBoardingHouse);
 router.delete('/:id', authMiddleware, deleteBoardingHouse);

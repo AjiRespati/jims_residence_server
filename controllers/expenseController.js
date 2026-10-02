@@ -9,6 +9,7 @@ const sequelize = db.sequelize;
 const logger = require('../config/logger'); // Assuming you have a logger setup
 const fs = require('fs'); // Import file system module if handling proofPath uploads here
 const path = require('path'); // Import path module
+const { isAdmin, canAccessBoardingHouse, boardingHouseIdScopeWhere } = require('../utils/scope');
 
 // Note: If proofPath is handled by middleware like NIKImagePath,
 // this controller method will receive req.proofPath.
@@ -81,6 +82,10 @@ exports.createExpense = async (req, res) => {
             return res.status(404).json({ message: 'Boarding House not found' });
         }
 
+        if (!canAccessBoardingHouse(req, boardingHouseId)) {
+            return res.status(403).json({ message: 'Forbidden' });
+        }
+
 
         // Create the Expense record
         const newExpense = await Expense.create({
@@ -146,7 +151,13 @@ exports.getAllExpenses = async (req, res) => {
 
         // Filter by BoardingHouse
         if (boardingHouseId) {
+            if (!canAccessBoardingHouse(req, boardingHouseId)) {
+                return res.status(200).json({ success: true, message: 'Expenses retrieved successfully', data: [] });
+            }
             expenseWhere.boardingHouseId = boardingHouseId;
+            isFilterApplied = true;
+        } else if (!isAdmin(req)) {
+            Object.assign(expenseWhere, boardingHouseIdScopeWhere(req));
             isFilterApplied = true;
         }
 

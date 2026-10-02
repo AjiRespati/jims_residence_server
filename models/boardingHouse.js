@@ -5,9 +5,11 @@ module.exports = (sequelize, DataTypes) => {
         name: { type: DataTypes.STRING, allowNull: false },
         address: { type: DataTypes.STRING, allowNull: false },
         description: { type: DataTypes.STRING, allowNull: false },
+        ownerId: { type: DataTypes.UUID, allowNull: true },
     }, { timestamps: true });
 
     BoardingHouse.associate = (models) => {
+        BoardingHouse.belongsTo(models.User, { as: "Owner", foreignKey: "ownerId", constraints: false });
         BoardingHouse.hasMany(models.Room, { foreignKey: "boardingHouseId" });
         BoardingHouse.hasMany(models.Price, { foreignKey: "boardingHouseId" });
         // Add the association to the new Expense model:

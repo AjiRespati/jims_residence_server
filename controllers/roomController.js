@@ -5,6 +5,7 @@ const { Op } = Sequelize;
 
 const { BoardingHouse, Price, Room, Tenant, Payment, AdditionalPrice, OtherCost, Invoice, Charge, Transaction, RoomHistory } = require('../models');
 const logger = require('../config/logger');
+const { isAdmin, canAccessBoardingHouse, boardingHouseScopeWhere } = require('../utils/scope');
 
 exports.getAllRooms = async (req, res) => {
     try {
@@ -75,7 +76,13 @@ exports.getAllRooms = async (req, res) => {
         let isBoardingHouseFilterApplied = false;
 
         if (boardingHouseId) {
+            if (!canAccessBoardingHouse(req, boardingHouseId)) {
+                return res.status(200).json({ success: true, message: 'Rooms retrieved successfully', data: [] });
+            }
             boardingHouseWhere.id = boardingHouseId;
+            isBoardingHouseFilterApplied = true;
+        } else if (!isAdmin(req)) {
+            Object.assign(boardingHouseWhere, boardingHouseScopeWhere(req));
             isBoardingHouseFilterApplied = true;
         }
 
@@ -261,6 +268,10 @@ exports.getRoomById = async (req, res) => {
             });
         }
 
+        if (!canAccessBoardingHouse(req, room.boardingHouseId)) {
+            return res.status(403).json({ success: false, message: 'Forbidden', data: null });
+        }
+
         const roomData = room.toJSON();
 
         // Process the Tenants array to get the single latestTenant object
@@ -332,6 +343,10 @@ exports.createRoom = async (req, res) => {
         const boardingHouse = await BoardingHouse.findByPk(boardingHouseId);
         if (!boardingHouse) {
             return res.status(404).json({ message: 'Boarding House not found' });
+        }
+
+        if (!canAccessBoardingHouse(req, boardingHouseId)) {
+            return res.status(403).json({ message: 'Forbidden' });
         }
 
         // Create the room - priceId is not included or is null/undefined
@@ -406,8 +421,17 @@ exports.updateRoom = async (req, res) => {
             });
         }
 
+        if (!canAccessBoardingHouse(req, room.boardingHouseId)) {
+            await t.rollback();
+            return res.status(403).json({ message: 'Forbidden' });
+        }
+
         // Optional: Basic validation for incoming boardingHouseId or priceId if they are being updated
         if (roomUpdateData.boardingHouseId) {
+            if (!canAccessBoardingHouse(req, roomUpdateData.boardingHouseId)) {
+                await t.rollback();
+                return res.status(403).json({ message: 'Forbidden' });
+            }
             const boardingHouse = await BoardingHouse.findByPk(roomUpdateData.boardingHouseId, { transaction: t });
             if (!boardingHouse) {
                 await t.rollback();
@@ -529,6 +553,10 @@ exports.deleteRoom = async (req, res) => {
     try {
         const data = await Room.findByPk(req.params.id);
         if (!data) return res.status(404).json({ error: 'room not found' });
+
+        if (!canAccessBoardingHouse(req, data.boardingHouseId)) {
+            return res.status(403).json({ message: 'Forbidden' });
+        }
 
         const roomId = req.params.id;
 

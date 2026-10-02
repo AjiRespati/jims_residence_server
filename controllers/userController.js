@@ -1,9 +1,21 @@
-const { User, Salesman, SubAgent, Agent } = require('../models');
+const bcrypt = require('bcryptjs');
+const { User } = require('../models');
 const logger = require('../config/logger');
 
 exports.getAllUsers = async (req, res) => {
     try {
-        let data = await User.findAll({
+        const caller = req.userRecord;
+        let where = {};
+        if (caller.level === 1) {
+            // Pemilik sees only their own staff (Penjaga).
+            where = { ownerId: caller.id };
+        } else if (caller.level === 0) {
+            return res.status(403).json({ message: 'Forbidden' });
+        }
+        // Admin (2) sees everyone.
+
+        const data = await User.findAll({
+            where,
             order: [["createdAt", "DESC"]]
         });
 
@@ -29,32 +41,42 @@ exports.getUserById = async (req, res) => {
     }
 };
 
-exports.createUser = async (req, res) => {
-    try {
-        const data = await User.create(req.body);
-        res.status(200).json(data);
-    } catch (error) {
-        logger.error(error);
-        res.status(400).json({ error: 'Bad Request' });
-    }
-};
-
 exports.updateUser = async (req, res) => {
     try {
         const { id } = req.params;
-        const { level, status } = req.body;
+        const { level, status, ownerId, password } = req.body;
+        const caller = req.userRecord;
 
-        // 1. find user by id
         const existingUser = await User.findByPk(id);
         if (!existingUser) return res.status(404).json({ error: 'user not found' });
 
-        const { name, image, address, phone, email } = existingUser;
+        // Pemilik (1) can only touch their own Penjaga (level 0).
+        if (caller.level === 1) {
+            if (existingUser.ownerId !== caller.id || existingUser.level !== 0) {
+                return res.status(403).json({ message: 'Forbidden' });
+            }
+            if (level !== undefined && level !== null && level !== 0) {
+                return res.status(403).json({ message: 'Forbidden' });
+            }
+        }
 
-        existingUser.level = (level === undefined || level === null) ? existingUser.level : level;
-        existingUser.status = status || existingUser.status;
-        existingUser.levelDesc = levelDescList[(level === undefined || level === null) ? existingUser.level : level];
+        if (level !== undefined && level !== null) {
+            existingUser.level = level;
+            existingUser.levelDesc = levelDescList[level];
+        }
+        if (status !== undefined && status !== null) {
+            existingUser.status = status;
+        }
+        if (ownerId !== undefined) {
+            if (caller.level !== 2) return res.status(403).json({ message: 'Forbidden' });
+            existingUser.ownerId = ownerId;
+        }
+        if (password) {
+            existingUser.password = await bcrypt.hash(password, 10);
+        }
 
         await existingUser.save();
+        existingUser.password = undefined;
         logger.info(`User updated: ${id}`);
 
         res.json(existingUser);
@@ -66,8 +88,15 @@ exports.updateUser = async (req, res) => {
 
 exports.deleteUser = async (req, res) => {
     try {
+        const caller = req.userRecord;
         const data = await User.findByPk(req.params.id);
         if (!data) return res.status(404).json({ error: 'user not found' });
+
+        if (caller.level === 1) {
+            if (data.ownerId !== caller.id || data.level !== 0) {
+                return res.status(403).json({ message: 'Forbidden' });
+            }
+        }
 
         await data.destroy();
         res.json({ message: 'user deleted successfully' });
@@ -78,7 +107,7 @@ exports.deleteUser = async (req, res) => {
 };
 
 const levelDescList = [
-    "Petugas Kost",
-    "Admin",
+    "Penjaga Kost",
     "Pemilik",
+    "Admin",
 ];

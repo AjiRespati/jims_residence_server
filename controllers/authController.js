@@ -8,15 +8,36 @@ const logger = require('../config/logger');
 
 exports.register = async (req, res) => {
     try {
-        const { username, password, name, email, phone, address, level, updateBy } = req.body;
+        const { username, password, name, email, phone, address, level, ownerId, updateBy } = req.body;
         const hashedPassword = await bcrypt.hash(password, 10);
 
         const count = await User.count();
 
-        const createLevel = count === 0 ? 2 : level
-
         const existingUser = await User.findOne({ where: { username } });
         if (existingUser) return res.status(400).json({ message: 'Username already exists' });
+
+        let createLevel;
+        let createOwnerId = null;
+        let createStatus = 'inactive';
+
+        if (count === 0) {
+            // Bootstrap: the very first user becomes the Admin.
+            createLevel = 2;
+            createStatus = 'active';
+        } else {
+            const callerLevel = req.userRecord ? req.userRecord.level : null;
+            if (callerLevel === 2) {
+                // Admin may create Pemilik (1) / Penjaga (0) / Admin (2).
+                createLevel = (level === undefined || level === null) ? 0 : level;
+                if (createLevel === 0) createOwnerId = ownerId || null;
+            } else if (callerLevel === 1) {
+                // Pemilik may only create Penjaga under themselves.
+                createLevel = 0;
+                createOwnerId = req.userRecord.id;
+            } else {
+                return res.status(403).json({ message: 'Forbidden' });
+            }
+        }
 
         await User.create({
             username,
@@ -27,6 +48,8 @@ exports.register = async (req, res) => {
             address,
             level: createLevel,
             levelDesc: levelDescList[createLevel],
+            status: createStatus,
+            ownerId: createOwnerId,
             updateBy
         });
 
@@ -44,6 +67,10 @@ exports.login = async (req, res) => {
 
         if (!user || !bcrypt.compareSync(password, user.password)) {
             return res.status(402).json({ message: 'Invalid credentials' });
+        }
+
+        if (user.status !== 'active') {
+            return res.status(403).json({ message: 'Account is not active' });
         }
 
         // Generate tokens
@@ -127,6 +154,7 @@ exports.self = async (req, res) => {
             level: user.level,
             status: user.status,
             levelDesc: user.levelDesc,
+            ownerId: user.ownerId,
         });
     } catch (error) {
         console.error(error);
@@ -194,7 +222,7 @@ exports.generic = async (req, res) => {
 };
 
 const levelDescList = [
-    "Petugas Kost",
-    "Admin",
+    "Penjaga Kost",
     "Pemilik",
+    "Admin",
 ];

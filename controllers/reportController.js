@@ -8,6 +8,7 @@ const { Invoice, Expense, BoardingHouse, Tenant, Room, Charge, Transaction, Tran
 } = require('../models');
 
 const { isValid, parseISO, setHours, format } = require('date-fns'); // Import date-fns utilities
+const { isAdmin, canAccessBoardingHouse, boardingHouseScopeWhere } = require('../utils/scope');
 
 
 
@@ -483,9 +484,18 @@ exports.getFinancialTransactions = async (req, res) => {
         // --- Prepare Boarding House Filter Conditions for Invoices and Expenses ---
         const boardingHouseWhere = {};
         if (boardingHouseId) {
+            if (!canAccessBoardingHouse(req, boardingHouseId)) {
+                return res.status(200).json({
+                    message: 'Financial transactions and summary retrieved successfully',
+                    data: [],
+                    summary: { totalIncomeAmount: 0, totalExpensesAmount: 0, netFinancialFlow: 0 }
+                });
+            }
             boardingHouseWhere.id = boardingHouseId;
+        } else if (!isAdmin(req)) {
+            Object.assign(boardingHouseWhere, boardingHouseScopeWhere(req));
         }
-        const isBoardingHouseFilterActive = !!boardingHouseId; // Convert to boolean
+        const isBoardingHouseFilterActive = !!boardingHouseId || !isAdmin(req); // Convert to boolean
 
         // --- Fetch Filtered Invoices (filtered by Transaction.transactionDate) ---
         // Invoice where clause will now only filter by status, not date

@@ -5,10 +5,12 @@ const { Op } = Sequelize;
 
 const { Price, BoardingHouse, Room, Tenant, Invoice, Charge, Transaction } = require('../models');
 const logger = require('../config/logger');
+const { isAdmin, canAccessBoardingHouse, boardingHouseIdScopeWhere } = require('../utils/scope');
 
 exports.getAllPrices = async (req, res) => {
     try {
         const prices = await Price.findAll({
+            where: isAdmin(req) ? {} : boardingHouseIdScopeWhere(req),
             include: [
                 {
                     model: BoardingHouse, // Include the associated BoardingHouse
@@ -140,6 +142,10 @@ exports.createPrice = async (req, res) => {
                 success: false,
                 message: 'Required fields (boardingHouseId, roomSize, amount, or name) are missing.'
             });
+        }
+
+        if (!canAccessBoardingHouse(req, boardingHouseId)) {
+            return res.status(403).json({ success: false, message: 'Forbidden' });
         }
 
         const data = await Price.create({

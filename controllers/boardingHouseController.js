@@ -5,11 +5,13 @@ const sequelize = db.sequelize;
 
 const { BoardingHouse, Room, Price, Expense, TransferOwner, Tenant, Invoice, Charge, Transaction, RoomHistory, AdditionalPrice, OtherCost } = require('../models');
 const logger = require('../config/logger');
+const { boardingHouseScopeWhere } = require('../utils/scope');
 
 exports.getAllBoardingHouses = async (req, res) => {
     try {
         // Fetch all boarding houses and include aggregated room counts
         const data = await BoardingHouse.findAll({
+            where: boardingHouseScopeWhere(req),
             attributes: [
                 'id',
                 'name',
@@ -74,7 +76,16 @@ exports.getBoardingHouseById = async (req, res) => {
 
 exports.createBoardingHouse = async (req, res) => {
     try {
-        const data = await BoardingHouse.create(req.body);
+        if (req.userRecord.level !== 1) {
+            return res.status(403).json({ message: 'Only Pemilik can create kos' });
+        }
+        const { name, address, description } = req.body;
+        const data = await BoardingHouse.create({
+            name,
+            address,
+            description,
+            ownerId: req.userRecord.id
+        });
         res.status(200).json(data);
     } catch (error) {
         logger.error(`❌ createBoardingHouse error: ${error.message}`);
@@ -88,11 +99,21 @@ exports.updateBoardingHouse = async (req, res) => {
         const data = await BoardingHouse.findByPk(req.params.id);
         if (!data) return res.status(404).json({ error: 'BoardingHouse not found' });
 
-        await data.update(req.body);
+        const caller = req.userRecord;
+        if (caller.level < 2 && data.ownerId !== caller.id) {
+            return res.status(403).json({ message: 'Forbidden' });
+        }
+
+        const { name, address, description, ownerId } = req.body;
+        if (name !== undefined) data.name = name;
+        if (address !== undefined) data.address = address;
+        if (description !== undefined) data.description = description;
+        if (ownerId !== undefined && caller.level === 2) data.ownerId = ownerId;
+
+        await data.save();
         res.json(data);
     } catch (error) {
-        logger.error(`❌ updateBoardingHouse = async (req, res) => {
-            error: ${error.message}`);
+        logger.error(`❌ updateBoardingHouse error: ${error.message}`);
         logger.error(error.stack);
         res.status(400).json({ error: 'Bad Request' });
     }
@@ -102,6 +123,11 @@ exports.deleteBoardingHouse = async (req, res) => {
     try {
         const data = await BoardingHouse.findByPk(req.params.id);
         if (!data) return res.status(404).json({ error: 'BoardingHouse not found' });
+
+        const caller = req.userRecord;
+        if (caller.level < 2 && data.ownerId !== caller.id) {
+            return res.status(403).json({ message: 'Forbidden' });
+        }
 
         const boardingHouseId = req.params.id;
 

@@ -9,6 +9,7 @@ const { Op } = Sequelize;
 const logger = require('../config/logger'); // Assuming you have a logger setup
 const fs = require('fs'); // Import file system module if handling proofPath uploads here
 const path = require('path'); // Import path module
+const { isAdmin, canAccessBoardingHouse, boardingHouseIdScopeWhere } = require('../utils/scope');
 
 // Note: If proofPath is handled by middleware like NIKImagePath,
 // this controller method will receive req.proofPath.
@@ -94,6 +95,11 @@ exports.createTransferOwner = async (req, res) => {
             return res.status(404).json({ message: 'Boarding House not found' });
         }
 
+        if (!canAccessBoardingHouse(req, boardingHouseId)) {
+            if (req.imagePath) deleteFile(req.imagePath, 'transfer owner image');
+            return res.status(403).json({ message: 'Forbidden' });
+        }
+
         // Create the TransferOwner record
         const newTransferOwner = await TransferOwner.create({
             boardingHouseId: boardingHouse.id,
@@ -152,7 +158,13 @@ exports.getAllTransferOwners = async (req, res) => {
 
         // Filter by BoardingHouse
         if (boardingHouseId) {
+            if (!canAccessBoardingHouse(req, boardingHouseId)) {
+                return res.status(200).json({ success: true, message: 'TransferOwner retrieved successfully', data: [] });
+            }
             transferOwnerWhere.boardingHouseId = boardingHouseId;
+            isFilterApplied = true;
+        } else if (!isAdmin(req)) {
+            Object.assign(transferOwnerWhere, boardingHouseIdScopeWhere(req));
             isFilterApplied = true;
         }
 
@@ -312,6 +324,10 @@ exports.deleteTransferOwner = async (req, res) => {
                 message: 'TransferOwner not found',
                 data: null
             });
+        }
+
+        if (!canAccessBoardingHouse(req, transferOwner.boardingHouseId)) {
+            return res.status(403).json({ success: false, message: 'Forbidden', data: null });
         }
 
         // Soft delete (sets deletedAt)

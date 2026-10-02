@@ -9,6 +9,7 @@ const { Tenant, Room, Price, AdditionalPrice, OtherCost,
 const logger = require('../config/logger');
 const path = require("path");
 const fs = require("fs");
+const { isAdmin, canAccessBoardingHouse, boardingHouseScopeWhere } = require('../utils/scope');
 const {
     subDays, addMonths, endOfMonth, isLastDayOfMonth, startOfDay, format,
     parseISO, isValid, setHours, setMinutes, setSeconds, setMilliseconds
@@ -101,7 +102,13 @@ exports.getAllTenants = async (req, res) => {
         let isBoardingHouseFilterApplied = false;
 
         if (boardingHouseId) {
+            if (!canAccessBoardingHouse(req, boardingHouseId)) {
+                return res.status(200).json({ success: true, message: 'Tenants retrieved successfully', data: [] });
+            }
             boardingHouseWhere.id = boardingHouseId;
+            isBoardingHouseFilterApplied = true;
+        } else if (!isAdmin(req)) {
+            Object.assign(boardingHouseWhere, boardingHouseScopeWhere(req));
             isBoardingHouseFilterApplied = true;
         }
 
@@ -235,7 +242,7 @@ exports.getTenantById = async (req, res) => {
             include: [
                 {
                     model: Room, // Include the associated Room
-                    attributes: ['id', 'roomNumber', 'roomSize', 'roomStatus'], // Select relevant Room attributes
+                    attributes: ['id', 'roomNumber', 'roomSize', 'roomStatus', 'boardingHouseId'], // Select relevant Room attributes
                     include: [
                         {
                             model: BoardingHouse, // Include the associated BoardingHouse nested within Room
@@ -308,6 +315,10 @@ exports.getTenantById = async (req, res) => {
                 message: 'Tenant not found',
                 data: null
             });
+        }
+
+        if (tenant.Room && !canAccessBoardingHouse(req, tenant.Room.boardingHouseId)) {
+            return res.status(403).json({ success: false, message: 'Forbidden', data: null });
         }
 
         // Convert the Sequelize instance to a plain JSON object for the response
@@ -392,6 +403,11 @@ exports.createTenant = async (req, res) => {
         if (!room) {
             await t.rollback();
             return res.status(404).json({ message: 'Room not found.' });
+        }
+
+        if (!canAccessBoardingHouse(req, room.boardingHouseId)) {
+            await t.rollback();
+            return res.status(403).json({ message: 'Forbidden' });
         }
 
         // Create the main price for the room
@@ -630,6 +646,11 @@ exports.updateTenant = async (req, res) => {
             });
         }
 
+        const tenantRoom = await Room.findByPk(tenant.roomId, { attributes: ['boardingHouseId'] });
+        if (tenantRoom && !canAccessBoardingHouse(req, tenantRoom.boardingHouseId)) {
+            return res.status(403).json({ message: 'Forbidden' });
+        }
+
         // 2. Prepare update data from request body and image path
         const tenantUpdateData = {};
         const updatableFields = [
@@ -753,6 +774,11 @@ exports.deleteTenant = async (req, res) => {
         const data = await Tenant.findByPk(req.params.id);
         if (!data) return res.status(404).json({ error: 'tenant not found' });
 
+        const tenantRoom = await Room.findByPk(data.roomId, { attributes: ['boardingHouseId'] });
+        if (tenantRoom && !canAccessBoardingHouse(req, tenantRoom.boardingHouseId)) {
+            return res.status(403).json({ message: 'Forbidden' });
+        }
+
         // Delete associated uploaded files (KTP image + signed contract)
         const { deleteUploadedFile } = require('../middleware/uploadMiddleware');
         deleteUploadedFile(data.NIKImagePath, 'Tenant NIK image');
@@ -785,7 +811,7 @@ exports.tenantCheckout = async (req, res) => {
             include: [
                 {
                     model: Room, // Ensure Room is associated in your models
-                    attributes: ['id', 'roomNumber', 'roomStatus'], // Include the correct attribute name: 'roomStatus'
+                    attributes: ['id', 'roomNumber', 'roomStatus', 'boardingHouseId'], // Include the correct attribute name: 'roomStatus'
                 },
             ],
             transaction, // Pass transaction to the find operation
@@ -794,6 +820,11 @@ exports.tenantCheckout = async (req, res) => {
         if (!tenant) {
             await transaction.rollback(); // Rollback if tenant not found
             return res.status(404).json({ success: false, message: 'Tenant not found.' });
+        }
+
+        if (tenant.Room && !canAccessBoardingHouse(req, tenant.Room.boardingHouseId)) {
+            await transaction.rollback();
+            return res.status(403).json({ success: false, message: 'Forbidden' });
         }
 
         // Check if the tenant is currently active

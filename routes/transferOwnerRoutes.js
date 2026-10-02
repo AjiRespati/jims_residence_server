@@ -2,6 +2,7 @@
 const express = require('express');
 const router = express.Router();
 const authMiddleware = require("../middleware/authMiddleware");
+const { requireLevel } = require("../middleware/roleMiddleware");
 const { upload, imageCompressor } = require("../middleware/uploadMiddleware");
 const { createTransferOwner, getAllTransferOwners, deleteTransferOwner, getTransferOwnerById } = require('../controllers/transferOwnerController');
 
@@ -21,6 +22,6 @@ router.get('/', authMiddleware, getAllTransferOwners);
 router.get('/:id', authMiddleware, getTransferOwnerById);
 
 // You might add PUT/DELETE routes later if needed
-router.delete('/:id', authMiddleware, deleteTransferOwner);
+router.delete('/:id', authMiddleware, requireLevel(1), deleteTransferOwner);
 
 module.exports = router;

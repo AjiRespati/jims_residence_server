@@ -12,8 +12,16 @@ module.exports = (sequelize, DataTypes) => {
         email: { type: DataTypes.STRING, allowNull: true, unique: true },
         level: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
         levelDesc: { type: DataTypes.STRING, allowNull: true },
-        status: { type: DataTypes.ENUM("new", "active", "inactive"), allowNull: false, defaultValue: "new" },
+        status: { type: DataTypes.ENUM("new", "active", "inactive"), allowNull: false, defaultValue: "inactive" },
+        ownerId: { type: DataTypes.UUID, allowNull: true },
         updateBy: { type: DataTypes.STRING, allowNull: true }
     }, { timestamps: true });
+
+    User.associate = (models) => {
+        User.belongsTo(models.User, { as: "Owner", foreignKey: "ownerId", constraints: false });
+        User.hasMany(models.User, { as: "Staff", foreignKey: "ownerId", constraints: false });
+        User.hasMany(models.BoardingHouse, { as: "OwnedBoardingHouses", foreignKey: "ownerId", constraints: false });
+    };
+
     return User;
 };
