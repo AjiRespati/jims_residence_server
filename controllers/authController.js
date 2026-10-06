@@ -8,7 +8,7 @@ const logger = require('../config/logger');
 
 exports.register = async (req, res) => {
     try {
-        const { username, password, name, email, phone, address, level, ownerId, updateBy } = req.body;
+        const { username, password, name, email, phone, address, NIKNumber, bankName, bankAccountName, bankAccountNumber, level, ownerId, updateBy } = req.body;
         const hashedPassword = await bcrypt.hash(password, 10);
 
         const count = await User.count();
@@ -28,7 +28,7 @@ exports.register = async (req, res) => {
             const callerLevel = req.userRecord ? req.userRecord.level : null;
             if (callerLevel === 2) {
                 // Admin may create Pemilik (1) / Penjaga (0) / Admin (2).
-                createLevel = (level === undefined || level === null) ? 0 : level;
+                createLevel = (level === undefined || level === null || level === '') ? 0 : Number(level);
                 if (createLevel === 0) createOwnerId = ownerId || null;
             } else if (callerLevel === 1) {
                 // Pemilik may only create Penjaga under themselves.
@@ -46,6 +46,11 @@ exports.register = async (req, res) => {
             email,
             phone,
             address,
+            NIKNumber,
+            signatureImagePath: req.imagePath || null,
+            bankName,
+            bankAccountName,
+            bankAccountNumber,
             level: createLevel,
             levelDesc: levelDescList[createLevel],
             status: createStatus,

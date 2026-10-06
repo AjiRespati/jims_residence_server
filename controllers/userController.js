@@ -44,7 +44,11 @@ exports.getUserById = async (req, res) => {
 exports.updateUser = async (req, res) => {
     try {
         const { id } = req.params;
-        const { level, status, ownerId, password } = req.body;
+        const {
+            level, status, ownerId, password,
+            name, phone, address, NIKNumber,
+            bankName, bankAccountName, bankAccountNumber,
+        } = req.body;
         const caller = req.userRecord;
 
         const existingUser = await User.findByPk(id);
@@ -55,25 +59,35 @@ exports.updateUser = async (req, res) => {
             if (existingUser.ownerId !== caller.id || existingUser.level !== 0) {
                 return res.status(403).json({ message: 'Forbidden' });
             }
-            if (level !== undefined && level !== null && level !== 0) {
+            if (level !== undefined && level !== null && level !== '' && Number(level) !== 0) {
                 return res.status(403).json({ message: 'Forbidden' });
             }
         }
 
-        if (level !== undefined && level !== null) {
-            existingUser.level = level;
-            existingUser.levelDesc = levelDescList[level];
+        if (level !== undefined && level !== null && level !== '') {
+            existingUser.level = Number(level);
+            existingUser.levelDesc = levelDescList[Number(level)];
         }
-        if (status !== undefined && status !== null) {
+        if (status !== undefined && status !== null && status !== '') {
             existingUser.status = status;
         }
         if (ownerId !== undefined) {
             if (caller.level !== 2) return res.status(403).json({ message: 'Forbidden' });
-            existingUser.ownerId = ownerId;
+            existingUser.ownerId = ownerId || null;
         }
         if (password) {
             existingUser.password = await bcrypt.hash(password, 10);
         }
+
+        // Owner profile fields (Admin editing a Pemilik, etc.)
+        if (name !== undefined) existingUser.name = name;
+        if (phone !== undefined) existingUser.phone = phone === '' ? null : phone;
+        if (address !== undefined) existingUser.address = address;
+        if (NIKNumber !== undefined) existingUser.NIKNumber = NIKNumber;
+        if (bankName !== undefined) existingUser.bankName = bankName;
+        if (bankAccountName !== undefined) existingUser.bankAccountName = bankAccountName;
+        if (bankAccountNumber !== undefined) existingUser.bankAccountNumber = bankAccountNumber;
+        if (req.imagePath) existingUser.signatureImagePath = req.imagePath;
 
         await existingUser.save();
         existingUser.password = undefined;

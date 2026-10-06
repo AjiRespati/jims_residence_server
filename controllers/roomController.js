@@ -3,7 +3,7 @@ const sequelize = db.sequelize;
 const Sequelize = db.Sequelize;
 const { Op } = Sequelize;
 
-const { BoardingHouse, Price, Room, Tenant, Payment, AdditionalPrice, OtherCost, Invoice, Charge, Transaction, RoomHistory } = require('../models');
+const { BoardingHouse, Price, Room, Tenant, Payment, AdditionalPrice, OtherCost, Invoice, Charge, Transaction, RoomHistory, User } = require('../models');
 const logger = require('../config/logger');
 const { isAdmin, canAccessBoardingHouse, boardingHouseScopeWhere } = require('../utils/scope');
 
@@ -221,7 +221,14 @@ exports.getRoomById = async (req, res) => {
             include: [
                 {
                     model: BoardingHouse,
-                    attributes: ['id', 'name', 'address', 'description']
+                    attributes: ['id', 'name', 'address', 'description', 'ownerId'],
+                    include: [
+                        {
+                            model: User,
+                            as: 'Owner',
+                            attributes: ['id', 'name', 'username', 'phone', 'address', 'email', 'NIKNumber', 'signatureImagePath', 'bankName', 'bankAccountName', 'bankAccountNumber']
+                        }
+                    ]
                 },
                 {
                     model: Price,

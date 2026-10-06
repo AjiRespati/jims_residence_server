@@ -65,7 +65,9 @@ const imageCompressor = async (req, res, next) => {
     };
 
     const process = (file) =>
-        file.mimetype === 'application/pdf' ? saveRaw(file) : compress(file);
+        (file.mimetype === 'application/pdf' || file.fieldname === 'signature')
+            ? saveRaw(file)
+            : compress(file);
 
     try {
         if (fieldFiles?.length) {

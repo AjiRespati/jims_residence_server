@@ -579,8 +579,34 @@ exports.createTenant = async (req, res) => {
             }
         }
         logger.error(`❌ createTenant error: ${error.message}`);
+        if (Array.isArray(error.errors) && error.errors.length > 0) {
+            logger.error(
+                `Validation details: ${error.errors
+                    .map((e) => `${e.path || e.field || '?'}: ${e.message}`)
+                    .join('; ')}`
+            );
+        }
         logger.error(error.stack);
-        return res.status(500).json({ message: error.message, error: 'Internal server error' });
+
+        let status = 500;
+        let message = error.message;
+        if (error.name === 'SequelizeUniqueConstraintError') {
+            status = 400;
+            const fields = (error.errors || [])
+                .map((e) => e.path || e.field)
+                .filter(Boolean)
+                .join(', ');
+            message =
+                `Data penghuni sudah terdaftar` +
+                (fields ? ` (${fields})` : '') +
+                `. Cek daftar penghuni yang ada.`;
+        } else if (error.name === 'SequelizeValidationError') {
+            status = 400;
+            message =
+                (error.errors || []).map((e) => e.message).join('; ') ||
+                'Data penghuni tidak valid.';
+        }
+        return res.status(status).json({ message, error: 'Internal server error' });
     }
 
     // Post-commit fetch for the response
